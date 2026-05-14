@@ -13,10 +13,10 @@ from dataset import AtariDataset
 # Make sure your files are named like this so imports work, 
 # or change the file names below to match your setup!
 # ---------------------------------------------------------
-from vae import AtariVAE, vae_loss_function
-from vqvae_simple import AtariVQVAE as SimpleVQVAE
-from vqvae_residual import AtariVQVAE as ResidualVQVAE
-from vit_vqae import AdvancedViTVQVAE
+from models.vae import AtariVAE, vae_loss_function
+from models.vqvae_simple import AtariVQVAE as SimpleVQVAE
+from models.vqvae_residual import AtariVQVAE as ResidualVQVAE
+from models.vit_vqae import AdvancedViTVQVAE
 
 def train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

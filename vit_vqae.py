@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from vqvae import VectorQuantizer # Reusing our perfected quantizer!
+from vqvae_simple import VectorQuantizer # Reusing our perfected quantizer!
 
 class ViTEncoder(nn.Module):
     """
@@ -126,7 +126,6 @@ class AdvancedViTVQVAE(nn.Module):
         return reconstruction, vq_loss
 
 if __name__ == "__main__":
-    # --- Quick GPU Test ---
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Testing Advanced ViT-VQ-VAE on: {device}")
     
@@ -138,4 +137,4 @@ if __name__ == "__main__":
     
     print(f"Input Data: {dummy_batch.shape}")
     print(f"Output Reconstruction: {recon.shape}")
-    print("✅ Model successfully built and processed the data!")
+    print("Model successfully built and processed the data!")

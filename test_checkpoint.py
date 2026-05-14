@@ -7,7 +7,7 @@ import os
 # Import our project modules
 import config
 from dataset import AtariDataset
-from vqvae import AtariVQVAE
+from vqvae_simple import AtariVQVAE
 
 def test_checkpoint(checkpoint_name="atari_vqvae_epoch_3.pth"):
     """

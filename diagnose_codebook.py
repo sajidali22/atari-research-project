@@ -7,7 +7,7 @@ import os
 # Import our project modules
 import config
 from dataset import AtariDataset
-from vqvae import AtariVQVAE
+from vqvae_simple import AtariVQVAE
 
 def diagnose_with_images(checkpoint_path):
     print(f"🔬 Running Full Diagnostic on: {checkpoint_path}")

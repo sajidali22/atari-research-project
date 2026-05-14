@@ -1,116 +1,115 @@
 import torch
-import torch.nn as nn 
 import torch.optim as optim
 from torch.utils.data import DataLoader
+import wandb
 import os
-import tqdm 
-import wandb # 1. Import the logging library
+from tqdm import tqdm
 
-# Import our configurations and data pipeline
 import config
 from dataset import AtariDataset
-from vqvae import AtariVQVAE
 
-def train_vqvae():
-    print("🚀 Initializing Universal VQ-VAE Feature Extractor Training...")
+# ---------------------------------------------------------
+# IMPORT ASSUMPTIONS:
+# Make sure your files are named like this so imports work, 
+# or change the file names below to match your setup!
+# ---------------------------------------------------------
+from vae import AtariVAE, vae_loss_function
+from vqvae_simple import AtariVQVAE as SimpleVQVAE
+from vqvae_residual import AtariVQVAE as ResidualVQVAE
+from vit_vqae import AdvancedViTVQVAE
 
-    # 2. Initialize Weights & Biases
-    # This creates a new project and run on your dashboard
+def train():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"🖥️ Starting Training on device: {device}")
+    
+    # 1. Initialize Weights & Biases
     wandb.init(
-        project="atari-universal-feature-extractor", 
-        name="vqvae-baseline-test", 
+        project="atari-universal-feature-extractor",
+        name=f"run-{config.MODEL_TYPE}",
         config={
-            "learning_rate": 1e-4,
-            "epochs": 10, # Leave at 1 for the CPU test
-            "batch_size": 64,
-            "embedding_dim": 64,
-            "num_embeddings": 512
+            "model_type": config.MODEL_TYPE,
+            "learning_rate": config.LEARNING_RATE,
+            "epochs": config.EPOCHS,
+            "batch_size": config.BATCH_SIZE
         }
     )
 
-    # Setup Device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"🖥️  Using device: {device}")
+    # 2. Dynamic Model Loading
+    print(f"🧠 Initializing Model Type: {config.MODEL_TYPE.upper()}")
+    if config.MODEL_TYPE == 'vae':
+        model = AtariVAE(latent_dim=config.LATENT_DIM).to(device)
+        
+    elif config.MODEL_TYPE == 'vqvae_simple':
+        model = SimpleVQVAE(num_embeddings=config.NUM_EMBEDDINGS, embedding_dim=config.EMBEDDING_DIM).to(device)
+        
+    elif config.MODEL_TYPE == 'vqvae_residual':
+        model = ResidualVQVAE(num_embeddings=config.NUM_EMBEDDINGS, embedding_dim=config.EMBEDDING_DIM).to(device)
+        
+    elif config.MODEL_TYPE == 'vit_vqvae':
+        model = AdvancedViTVQVAE(num_embeddings=config.NUM_EMBEDDINGS, embed_dim=256).to(device)
+        
+    else:
+        raise ValueError("Invalid MODEL_TYPE in config.py!")
 
-    # Load Dataset
-    print("📂 Loading dataset...")
+    # 3. Dataset and Optimizer
     train_dataset = AtariDataset(config.TRAIN_DIR)
-    
-    # Notice we now use wandb.config to access our parameters!
-    train_loader = DataLoader(
-        train_dataset, 
-        batch_size=wandb.config.batch_size, 
-        shuffle=True, 
-        num_workers=2,
-        pin_memory=True if torch.cuda.is_available() else False
-    )
+    train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True)
+    optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
 
-    # Initialize the VQ-VAE Model using tracked config parameters
-    model = AtariVQVAE(
-        in_channels=4, 
-        num_embeddings=wandb.config.num_embeddings, 
-        embedding_dim=wandb.config.embedding_dim
-    ).to(device)
-    
-    # Optimizer and Loss Function
-    optimizer = optim.Adam(model.parameters(), lr=wandb.config.learning_rate)
-    mse_loss_fn = nn.MSELoss() 
-    
-    os.makedirs("saved_models", exist_ok=True)
-
-    print("\n🔥 Starting VQ-VAE Training Loop...")
-    model.train() 
-
-    for epoch in range(1, wandb.config.epochs + 1):
-        total_train_loss = 0
+    # 4. The Smart Training Loop
+    print(f"🔥 Starting Training Loop for {config.EPOCHS} Epochs...")
+    for epoch in range(1, config.EPOCHS + 1):
+        model.train()
+        total_epoch_loss = 0
         
-        pbar = tqdm.tqdm(train_loader, desc=f"Epoch [{epoch}/{wandb.config.epochs}]", unit="batch")
+        loop = tqdm(train_loader, desc=f"Epoch [{epoch}/{config.EPOCHS}]")
         
-        for batch_idx, batch in enumerate(pbar):
+        for batch_idx, batch in enumerate(loop):
             batch = batch.to(device)
-            
-            # Step A: Zero gradients
             optimizer.zero_grad()
             
-            # Step B: Forward pass
-            reconstruction, vq_loss = model(batch)
+            # --- CONDITIONAL MATH BASED ON MODEL TYPE ---
+            if config.MODEL_TYPE == 'vae':
+                # VAEs return Means and Log Variances
+                reconstructed, mu, logvar = model(batch)
+                loss, recon_loss, extra_loss = vae_loss_function(
+                    reconstructed, batch, mu, logvar, beta=config.BETA
+                )
+                loss_name = "KL Divergence"
+                
+            else:
+                # All VQ-VAEs return the Dictionary Commitment Loss
+                reconstructed, vq_loss = model(batch)
+                recon_loss = torch.nn.functional.mse_loss(reconstructed, batch)
+                loss = recon_loss + vq_loss
+                extra_loss = vq_loss
+                loss_name = "VQ Codebook Loss"
+            # --------------------------------------------
             
-            # Step C: Calculate Total Loss
-            recon_loss = mse_loss_fn(reconstruction, batch)
-            total_loss = recon_loss + vq_loss
-            
-            # Step D: Backward pass
-            total_loss.backward()
+            loss.backward()
             optimizer.step()
             
-            total_train_loss += total_loss.item()
+            # Tracking and logging
+            total_epoch_loss += loss.item()
+            loop.set_postfix({"Total Loss": f"{loss.item():.4f}"})
             
-            # 3. Log metrics to the wandb dashboard!
-            # We do this every 10 batches to keep the dashboard fast and clean
-            if batch_idx % 10 == 0:
-                pbar.set_postfix({"Total Loss": f"{total_loss.item():.4f}"})
-                
+            if batch_idx % 50 == 0:
                 wandb.log({
-                    "Total Loss": total_loss.item(),
-                    "Reconstruction Loss": recon_loss.item(),
-                    "VQ Codebook Loss": vq_loss.item(),
-                    "Batch": batch_idx + (epoch - 1) * len(train_loader)
+                    "Batch": batch_idx + (epoch - 1) * len(train_loader),
+                    "Epoch": epoch,
+                    "Total Loss": loss.item(),
+                    "Reconstruction Loss": recon_loss.item() if config.MODEL_TYPE != 'vae' else recon_loss.item() / config.BATCH_SIZE,
+                    loss_name: extra_loss.item()
                 })
-
-            # Quick CPU test break
-            # if batch_idx == 10:
-            #     break
-
-        # Log the average loss for the whole epoch
-        avg_loss = total_train_loss / (batch_idx + 1)
-        wandb.log({"Epoch": epoch, "Average Epoch Loss": avg_loss})
         
-        print(f"\n✅ Epoch {epoch} Test Complete!\n")
-        torch.save(model.state_dict(), f"saved_models/atari_vqvae_epoch_{epoch}.pth")
-
-    # 4. Finish the run cleanly
+        wandb.log({"Average Epoch Loss": total_epoch_loss / len(train_loader)})
+        
+        # 5. Save Model
+        save_path = os.path.join(config.SAVE_DIR, f"{config.MODEL_TYPE}_epoch_{epoch}.pth")
+        torch.save(model.state_dict(), save_path)
+    
     wandb.finish()
-    print("🎉 VQ-VAE Training Script is ready and fully tracked!")
+    print("Training fully completed!")
 
 if __name__ == "__main__":
-    train_vqvae()
+    train()

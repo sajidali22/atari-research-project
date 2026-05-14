@@ -7,23 +7,27 @@ TRAIN_DIR = "atari_train_dataset"
 TEST_DIR = "atari_test_dataset"
 SAVE_DIR = "saved_models"
 
-# Ensure the save folder exists so we don't crash at the end of an epoch
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 # ==========================================
 # 2. Model Architecture Selection
 # ==========================================
-# Options: 'simple', 'residual', or 'vit'
-MODEL_TYPE = 'vit'
+# CHOOSE ONE: 'vae', 'vqvae_simple', 'vqvae_residual', 'vit_vqvae'
+MODEL_TYPE = 'vqvae_residual' 
 
 # ==========================================
-# 3. VQ-VAE Hyperparameters
+# 3. Architecture Specific Hyperparameters
 # ==========================================
-NUM_EMBEDDINGS = 512  # Size of the dictionary
-EMBEDDING_DIM = 64    # Size of each puzzle piece
+# For VQ-VAEs (Simple, Residual, ViT)
+NUM_EMBEDDINGS = 512  
+EMBEDDING_DIM = 64    
+
+# For Standard VAE only
+LATENT_DIM = 256
+BETA = 1.0 # Weight of the KL-Divergence penalty
 
 # ==========================================
-# 4. Training Hyperparameters
+# 4. Universal Training Hyperparameters
 # ==========================================
 BATCH_SIZE = 64
 LEARNING_RATE = 1e-4

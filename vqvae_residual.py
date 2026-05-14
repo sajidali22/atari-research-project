@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # ==========================================
-# NEW: Advanced CNN Residual Block
+# CNN Residual Block
 # ==========================================
 class ResidualBlock(nn.Module):
     """
@@ -21,7 +21,6 @@ class ResidualBlock(nn.Module):
         )
 
     def forward(self, x):
-        # The magic of ResNet: Output = Input + Processed_Input
         return x + self.block(x)
 
 # ==========================================
@@ -88,9 +87,6 @@ class VectorQuantizer(nn.Module):
         quantized = inputs + (quantized - inputs).detach()
         return quantized, vq_loss
 
-# ==========================================
-# The Upgraded VQ-VAE Architecture
-# ==========================================
 class AtariVQVAE(nn.Module):
     def __init__(self, in_channels=4, num_embeddings=512, embedding_dim=64):
         super(AtariVQVAE, self).__init__()

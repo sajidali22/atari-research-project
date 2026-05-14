@@ -1,0 +1,1 @@
+{"Batch":17180,"_timestamp":1.7786124888829155e+09,"Reconstruction Loss":0.006824756506830454,"Epoch":1,"_wandb":{"runtime":2104},"_step":1719,"Average Epoch Loss":0.19016176606455854,"_runtime":2104,"Total Loss":0.06340578943490982,"VQ Codebook Loss":0.0565810352563858}

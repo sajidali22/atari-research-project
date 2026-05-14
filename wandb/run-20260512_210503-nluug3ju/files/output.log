@@ -1,0 +1,70 @@
+🖥️  Using device: cpu
+📂 Loading dataset...
+📂 Mapping 44 files from atari_train_dataset...
+✅ Dataset ready! Total frames available: 1100000
+
+🔥 Starting VQ-VAE Training Loop...
+Epoch [1/10]: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 17188/17188 [24:38<00:00, 11.62batch/s, Total Loss=0.0549]
+
+✅ Epoch 1 Test Complete!
+Epoch [2/10]: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 17188/17188 [21:37<00:00, 13.25batch/s, Total Loss=0.0486]
+
+
+✅ Epoch 2 Test Complete!
+Epoch [3/10]: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 17188/17188 [21:00<00:00, 13.64batch/s, Total Loss=0.0429]
+
+
+✅ Epoch 3 Test Complete!
+Epoch [4/10]: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 17188/17188 [21:42<00:00, 13.19batch/s, Total Loss=0.0471]
+
+
+✅ Epoch 4 Test Complete!
+Epoch [5/10]:  15%|██████████████████████▊                                                                                                                                     | 2518/17188 [04:22<25:27,  9.61batch/s, Total Loss=0.0423]
+Traceback (most recent call last):
+  File "/home/sajidali/Entrollics/TU-Dresden/ResearchProject/train.py", line 116, in <module>
+    train_vqvae()
+  File "/home/sajidali/Entrollics/TU-Dresden/ResearchProject/train.py", line 76, in train_vqvae
+    reconstruction, vq_loss = model(batch)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/sajidali/Entrollics/TU-Dresden/ResearchProject/vqvae.py", line 84, in forward
+    reconstruction = self.decoder(quantized)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/conv.py", line 1186, in forward
+    return F.conv_transpose2d(
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/sajidali/Entrollics/TU-Dresden/ResearchProject/train.py", line 116, in <module>
+    train_vqvae()
+  File "/home/sajidali/Entrollics/TU-Dresden/ResearchProject/train.py", line 76, in train_vqvae
+    reconstruction, vq_loss = model(batch)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/sajidali/Entrollics/TU-Dresden/ResearchProject/vqvae.py", line 84, in forward
+    reconstruction = self.decoder(quantized)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/torch/nn/modules/conv.py", line 1186, in forward
+    return F.conv_transpose2d(
+KeyboardInterrupt

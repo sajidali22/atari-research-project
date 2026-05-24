@@ -21,7 +21,7 @@ def train():
     # 1. Initialize Weights & Biases
     wandb.init(
         project="atari-universal-feature-extractor",
-        name=f"run-{config.MODEL_TYPE}",
+        name=f"run-{config.MODEL_TYPE}_weighted_loss",
         config={
             "model_type": config.MODEL_TYPE,
             "learning_rate": config.LEARNING_RATE,

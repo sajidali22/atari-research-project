@@ -11,6 +11,7 @@ from dataset import AtariDataset
 # 🚨 Import our fresh, clean models!
 from models.standard_vae import StandardVAE, standard_vae_loss
 from models.ema_vqvae import EmaVqVae
+from models.residual_vqvae import AtariResidualVQVAE
 
 def train():
     # Will safely fall back to CPU as you requested
@@ -36,6 +37,12 @@ def train():
         
     elif config.MODEL_TYPE == 'ema_vqvae':
         model = EmaVqVae(num_embeddings=config.NUM_EMBEDDINGS, embedding_dim=config.EMBEDDING_DIM).to(device)
+    
+    elif config.MODEL_TYPE == 'residual_vqvae':
+        model = AtariResidualVQVAE(
+            num_embeddings=config.NUM_EMBEDDINGS, 
+            embedding_dim=config.EMBEDDING_DIM
+        ).to(device)
         
     else:
         raise ValueError(f"❌ Invalid MODEL_TYPE '{config.MODEL_TYPE}' in config.py!")

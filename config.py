@@ -12,8 +12,8 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 # ==========================================
 # 2. Model Architecture Selection
 # ==========================================
-# Options: 'standard_vae', 'ema_vqvae'
-MODEL_TYPE = 'standard_vae' 
+# Options: 'standard_vae', 'ema_vqvae', 'residual_vqvae
+MODEL_TYPE = 'residual_vqvae' 
 
 # ==========================================
 # 3. Architecture Specific Hyperparameters

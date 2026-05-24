@@ -11,7 +11,7 @@ from dataset import AtariDataset
 # 🚨 Import our fresh, clean models!
 from models.standard_vae import StandardVAE, standard_vae_loss
 from models.ema_vqvae import EmaVqVae
-from models.residual_vqvae import AtariResidualVQVAE
+from models.residual_vqvae import AtariResidualVQVAE, weighted_sprite_mse_loss
 
 def train():
     # Will safely fall back to CPU as you requested
@@ -28,10 +28,7 @@ def train():
             "epochs": config.EPOCHS,
             "batch_size": config.BATCH_SIZE,
             "num_embeddings": config.NUM_EMBEDDINGS if config.MODEL_TYPE != 'standard_vae' else None,
-            "embedding_dim": config.EMBEDDING_DIM if config.MODEL_TYPE != 'standard_vae' else None,
-            "commitment_cost": config.COMMITMENT_COST if config.MODEL_TYPE != 'standard_vae' else None,
-            "decay": config.DECAY if config.MODEL_TYPE != 'standard_vae' else None,
-            
+            "embedding_dim": config.EMBEDDING_DIM if config.MODEL_TYPE != 'standard_vae' else None
         }
     )
 
@@ -86,7 +83,13 @@ def train():
                 
             elif config.MODEL_TYPE in ['ema_vqvae', 'residual_vqvae']:
                 reconstructed, vq_loss = model(batch)
-                recon_loss = torch.nn.functional.mse_loss(reconstructed, batch)
+                # recon_loss = torch.nn.functional.mse_loss(reconstructed, batch)
+                recon_loss = weighted_sprite_mse_loss(
+                    reconstructed, 
+                    batch, 
+                    multiplier=10.0, 
+                    threshold=0.01
+                )
                 loss = recon_loss + vq_loss
                 extra_loss = vq_loss
                 loss_name = "VQ Codebook Loss"

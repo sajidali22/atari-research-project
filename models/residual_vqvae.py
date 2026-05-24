@@ -77,3 +77,41 @@ class AtariResidualVQVAE(nn.Module):
         quantized, vq_loss = self.quantizer(encoded)
         reconstruction = self.decoder(quantized)
         return reconstruction, vq_loss
+    
+
+def weighted_sprite_mse_loss(reconstructed, target, multiplier=10.0, threshold=0.01):
+    """
+    Calculates MSE Loss but heavily penalizes mistakes on moving sprites.
+    
+    Args:
+        reconstructed: The output of the VQ-VAE [B, 4, 84, 84]
+        target: The original Atari frames [B, 4, 84, 84]
+        multiplier: How much more important moving pixels are (Default: 10x)
+        threshold: Minimum pixel color change to be considered "movement"
+    """
+    # 1. Calculate pixel differences between consecutive frames (Frames 1-2, 2-3, 3-4)
+    # diff shape: [B, 3, 84, 84]
+    diff = torch.abs(target[:, 1:, :, :] - target[:, :-1, :, :])
+    
+    # 2. If a pixel changed in ANY of the frame transitions, mark it!
+    # movement_mask shape: [B, 1, 84, 84]
+    movement_mask, _ = torch.max(diff, dim=1, keepdim=True)
+    
+    # 3. Create a binary mask (1.0 if moving, 0.0 if static)
+    binary_mask = (movement_mask > threshold).float()
+    
+    # 4. Expand the 1-channel mask to match our 4-channel target
+    # expanded_mask shape: [B, 4, 84, 84]
+    expanded_mask = binary_mask.expand_as(target)
+    
+    # 5. Create the Weight Matrix. 
+    # Backgrounds default to 1.0. Moving sprites get (1.0 + 9.0 = 10.0)
+    weight_matrix = torch.ones_like(target) + (expanded_mask * (multiplier - 1.0))
+    
+    # 6. Calculate raw, un-averaged MSE
+    raw_mse = F.mse_loss(reconstructed, target, reduction='none')
+    
+    # 7. Apply our weights and average the result
+    weighted_mse = (raw_mse * weight_matrix).mean()
+    
+    return weighted_mse

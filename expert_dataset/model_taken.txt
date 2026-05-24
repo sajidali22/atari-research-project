@@ -1,0 +1,243 @@
+ now complete the script, make it simple , these are the logs
+
+
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+
+Users of this version of Gym should be able to simply replace 'import gym' with 'import gymnasium as gym' in the vast majority of cases.
+
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+
+=====================================================================
+
+🚀 PIPELINE INITIATION: FORCE ALL GAME DATA COLLECT ENGINE
+
+=====================================================================
+
+
+🎯 Target Pipeline Initialized: BeamRiderNoFrameskip-v4
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/save_util.py:167: UserWarning: Could not deserialize object learning_rate. Consider using `custom_objects` argument to replace this object.
+
+Exception: 'bytes' object cannot be interpreted as an integer
+
+  warnings.warn(
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/save_util.py:167: UserWarning: Could not deserialize object lr_schedule. Consider using `custom_objects` argument to replace this object.
+
+Exception: 'bytes' object cannot be interpreted as an integer
+
+  warnings.warn(
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/save_util.py:167: UserWarning: Could not deserialize object clip_range. Consider using `custom_objects` argument to replace this object.
+
+Exception: 'bytes' object cannot be interpreted as an integer
+
+  warnings.warn(
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/vec_env/patch_gym.py:95: UserWarning: You loaded a model that was trained using OpenAI Gym. We strongly recommend transitioning to Gymnasium by saving that model again.
+
+  warnings.warn(
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/base_class.py:751: UserWarning: You are probably loading a A2C/PPO model saved with SB3 < 1.7.0, we deactivated exact_match so you can save the model again to avoid issues in the future (see https://github.com/DLR-RM/stable-baselines3/issues/1233 for more info). Original error: Error(s) in loading state_dict for ActorCriticCnnPolicy:
+
+        Missing key(s) in state_dict: "pi_features_extractor.cnn.0.weight", "pi_features_extractor.cnn.0.bias", "pi_features_extractor.cnn.2.weight", "pi_features_extractor.cnn.2.bias", "pi_features_extractor.cnn.4.weight", "pi_features_extractor.cnn.4.bias", "pi_features_extractor.linear.0.weight", "pi_features_extractor.linear.0.bias", "vf_features_extractor.cnn.0.weight", "vf_features_extractor.cnn.0.bias", "vf_features_extractor.cnn.2.weight", "vf_features_extractor.cnn.2.bias", "vf_features_extractor.cnn.4.weight", "vf_features_extractor.cnn.4.bias", "vf_features_extractor.linear.0.weight", "vf_features_extractor.linear.0.bias".  
+
+Note: the model should still work fine, this only a warning.
+
+  warnings.warn(
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: sb3/ppo-BeamRiderNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/BeamRider-v5
+
+A.L.E: Arcade Learning Environment (version 0.11.2+ecc1138)
+
+[Powered by Stella]
+
+   ✅ Collection complete. [Source: sb3/ppo-BeamRiderNoFrameskip-v4] -> Saved to custom_datasets/train/BeamRiderNoFrameskip-v4_expert_50000_frames.npz                          
+
+
+🎯 Target Pipeline Initialized: BreakoutNoFrameskip-v4
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/save_util.py:167: UserWarning: Could not deserialize object learning_rate. Consider using `custom_objects` argument to replace this object.
+
+Exception: 'bytes' object cannot be interpreted as an integer
+
+  warnings.warn(
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/save_util.py:167: UserWarning: Could not deserialize object lr_schedule. Consider using `custom_objects` argument to replace this object.
+
+Exception: 'bytes' object cannot be interpreted as an integer
+
+  warnings.warn(
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/save_util.py:167: UserWarning: Could not deserialize object clip_range. Consider using `custom_objects` argument to replace this object.
+
+Exception: 'bytes' object cannot be interpreted as an integer
+
+  warnings.warn(
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/vec_env/patch_gym.py:95: UserWarning: You loaded a model that was trained using OpenAI Gym. We strongly recommend transitioning to Gymnasium by saving that model again.
+
+  warnings.warn(
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: sb3/ppo-BreakoutNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/Breakout-v5
+
+   ✅ Collection complete. [Source: sb3/ppo-BreakoutNoFrameskip-v4] -> Saved to custom_datasets/train/BreakoutNoFrameskip-v4_expert_50000_frames.npz                            
+
+
+🎯 Target Pipeline Initialized: DemonAttackNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: julgom/dqn-DemonAttackNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/DemonAttack-v5
+
+   ✅ Collection complete. [Source: julgom/dqn-DemonAttackNoFrameskip-v4] -> Saved to custom_datasets/train/DemonAttackNoFrameskip-v4_expert_50000_frames.npz                   
+
+
+🎯 Target Pipeline Initialized: EnduroNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: sb3/ppo-EnduroNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/Enduro-v5
+
+   ✅ Collection complete. [Source: sb3/ppo-EnduroNoFrameskip-v4] -> Saved to custom_datasets/train/EnduroNoFrameskip-v4_expert_50000_frames.npz                                
+
+
+🎯 Target Pipeline Initialized: MsPacmanNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: sb3/ppo-MsPacmanNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/MsPacman-v5
+
+   ✅ Collection complete. [Source: sb3/ppo-MsPacmanNoFrameskip-v4] -> Saved to custom_datasets/train/MsPacmanNoFrameskip-v4_expert_50000_frames.npz                            
+
+
+🎯 Target Pipeline Initialized: PongNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: sb3/ppo-PongNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/Pong-v5
+
+   ✅ Collection complete. [Source: sb3/ppo-PongNoFrameskip-v4] -> Saved to custom_datasets/train/PongNoFrameskip-v4_expert_50000_frames.npz                                    
+
+
+🎯 Target Pipeline Initialized: QbertNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: sb3/ppo-QbertNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/Qbert-v5
+
+   ✅ Collection complete. [Source: sb3/ppo-QbertNoFrameskip-v4] -> Saved to custom_datasets/train/QbertNoFrameskip-v4_expert_50000_frames.npz                                  
+
+
+🎯 Target Pipeline Initialized: RiverraidNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: qgallouedec/ppo-RiverraidNoFrameskip-v4-3987763893
+
+   🎮 Booting runtime processor: ALE/Riverraid-v5
+
+   ✅ Collection complete. [Source: qgallouedec/ppo-RiverraidNoFrameskip-v4-3987763893] -> Saved to custom_datasets/train/RiverraidNoFrameskip-v4_expert_50000_frames.npz       
+
+
+🎯 Target Pipeline Initialized: RoadRunnerNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: sb3/a2c-RoadRunnerNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/RoadRunner-v5
+
+   ✅ Collection complete. [Source: sb3/a2c-RoadRunnerNoFrameskip-v4] -> Saved to custom_datasets/train/RoadRunnerNoFrameskip-v4_expert_50000_frames.npz                        
+
+
+🎯 Target Pipeline Initialized: SeaquestNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: sb3/ppo-SeaquestNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/Seaquest-v5
+
+   ✅ Collection complete. [Source: sb3/ppo-SeaquestNoFrameskip-v4] -> Saved to custom_datasets/train/SeaquestNoFrameskip-v4_expert_50000_frames.npz                            
+
+
+🎯 Target Pipeline Initialized: SpaceInvadersNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: sb3/ppo-SpaceInvadersNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/SpaceInvaders-v5
+
+   ✅ Collection complete. [Source: sb3/ppo-SpaceInvadersNoFrameskip-v4] -> Saved to custom_datasets/train/SpaceInvadersNoFrameskip-v4_expert_50000_frames.npz                  
+
+
+=====================================================================
+
+🧪 EVALUATION RANGE TRACKING: UNSEEN GAME PROFILING
+
+=====================================================================
+
+
+🎯 Target Pipeline Initialized: AlienNoFrameskip-v4
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/base_class.py:773: UserWarning: You are probably loading a DQN model saved with SB3 < 2.4.0, we truncated the optimizer state so you can save the model again to avoid issues in the future (see https://github.com/DLR-RM/stable-baselines3/pull/1963 for more info). Original error: loaded state dict contains a parameter group that doesn't match the size of optimizer's group 
+
+Note: the model should still work fine, this only a warning.
+
+  warnings.warn(
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: UnclearMind/dqn-AlienNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/Alien-v5
+
+   ✅ Collection complete. [Source: UnclearMind/dqn-AlienNoFrameskip-v4] -> Saved to custom_datasets/test/AlienNoFrameskip-v4_expert_50000_frames.npz                           
+
+
+🎯 Target Pipeline Initialized: AsteroidsNoFrameskip-v4
+
+dqn-AsteroidsNoFrameskip-v4.zip: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████| 27.3M/27.3M [00:03<00:00, 8.69MB/s]
+
+/home/sajidali/miniconda3/envs/attari/lib/python3.10/site-packages/stable_baselines3/common/save_util.py:167: UserWarning: Could not deserialize object exploration_schedule. Consider using `custom_objects` argument to replace this object.
+
+Exception: 'bytes' object cannot be interpreted as an integer
+
+  warnings.warn(
+
+   ⚠️ Target path direct pull failed (ReplayBuffer does not support optimize_memory_usage = True and handle_timeout_termination = True simultaneously.), initiating backup sweep...
+
+   🔍 Searching Hugging Face Hub for: AsteroidsNoFrameskip-v4...
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: CS462/dqn-AsteroidsNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/Asteroids-v5
+
+   ✅ Collection complete. [Source: CS462/dqn-AsteroidsNoFrameskip-v4] -> Saved to custom_datasets/test/AsteroidsNoFrameskip-v4_expert_50000_frames.npz                         
+
+
+🎯 Target Pipeline Initialized: AtlantisNoFrameskip-v4
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: redjackfred/dqn-AtlantisNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/Atlantis-v5
+
+   ✅ Collection complete. [Source: redjackfred/dqn-AtlantisNoFrameskip-v4] -> Saved to custom_datasets/test/AtlantisNoFrameskip-v4_expert_50000_frames.npz                     
+
+
+🎯 Target Pipeline Initialized: IceHockeyNoFrameskip-v4
+
+   ⚠️ Target path direct pull failed (401 Client Error. (Request ID: Root=1-6a12d8e0-1efa6a930d5b607144d71be3;2dd9198d-0695-4cd8-87f8-e1391fb88f81)
+
+
+Repository Not Found for url: https://huggingface.co/sb3/dqn-IceHockeyNoFrameskip-v4/resolve/main/dqn-IceHockeyNoFrameskip-v4.zip.
+
+Please make sure you specified the correct `repo_id` and `repo_type`.
+
+If you are trying to access a private or gated repo, make sure you are authenticated. For more details, see https://huggingface.co/docs/huggingface_hub/authentication
+
+Invalid username or password.), initiating backup sweep...
+
+   🔍 Searching Hugging Face Hub for: IceHockeyNoFrameskip-v4...
+
+   📋 [Data Origin Tracker] -> Collecting from source repo: Yumejichi/dqn-IceHockeyNoFrameskip-v4
+
+   🎮 Booting runtime processor: ALE/IceHockey-v5 

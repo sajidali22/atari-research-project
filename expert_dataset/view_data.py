@@ -13,7 +13,7 @@ def inspect_and_visualize(file_path):
     # 1. Inspect and PRINT the shape
     print(f"--- Dataset shape: {frames.shape} ---")
     
-    sample_stack = frames[4900] # Shape is (4, 84, 84)
+    sample_stack = frames[4800] # Shape is (4, 84, 84)
     
     fig, axes = plt.subplots(1, 4, figsize=(15, 4))
     
@@ -30,8 +30,7 @@ def inspect_and_visualize(file_path):
     plt.show()
 
 if __name__ == "__main__":
-    # Point this to one of your collected files
     # Example: custom_datasets/train/PongNoFrameskip-v4_expert_50000_frames.npz
-    target_file = "train/RoadRunnerNoFrameskip-v4_expert_50000_frames.npz"
+    target_file = "train/SpaceInvadersNoFrameskip-v4_expert_50000_frames.npz"
     
     inspect_and_visualize(target_file)

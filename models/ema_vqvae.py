@@ -45,6 +45,7 @@ class EmaVectorQuantizer(nn.Module):
         quantized = quantized.permute(0, 3, 1, 2).contiguous()
 
         # 4. EMA Dictionary Updates & Dead Code Revival (Training Only)
+        # 4. EMA Dictionary Updates & Dead Code Revival (Training Only)
         if self.training:
             self._ema_cluster_size = self._ema_cluster_size * self.decay + \
                                      (1 - self.decay) * torch.sum(encodings, 0)
@@ -57,9 +58,9 @@ class EmaVectorQuantizer(nn.Module):
                 num_dead = dead_codes.sum().item()
                 random_indices = torch.randperm(flat_inputs.size(0))[:num_dead]
                 
-                # Teleport dead codes to active locations
-                self.embeddings.weight.data[dead_codes] = flat_inputs[random_indices]
-                self._ema_w[dead_codes] = flat_inputs[random_indices]
+                # FIX 1: Add .detach() so we don't save the computation graph!
+                self.embeddings.weight.data[dead_codes] = flat_inputs[random_indices].detach()
+                self._ema_w[dead_codes] = flat_inputs[random_indices].detach()
                 self._ema_cluster_size[dead_codes] = usage_threshold 
 
             # Standard EMA weight update
@@ -68,7 +69,8 @@ class EmaVectorQuantizer(nn.Module):
                 (self._ema_cluster_size + self.epsilon)
                 / (n_total + self.num_embeddings * self.epsilon) * n_total)
             
-            dw = torch.matmul(encodings.t(), flat_inputs)
+            # FIX 2: Add .detach() to flat_inputs here!
+            dw = torch.matmul(encodings.t(), flat_inputs.detach())
             self._ema_w = self._ema_w * self.decay + (1 - self.decay) * dw
             
             self.embeddings.weight.data = self._ema_w / self._ema_cluster_size.unsqueeze(1)
@@ -83,7 +85,7 @@ class EmaVectorQuantizer(nn.Module):
         return quantized, vq_loss
 
 class EmaVqVae(nn.Module):
-    def __init__(self, in_channels=4, num_embeddings=512, embedding_dim=64):
+    def __init__(self, in_channels=4, num_embeddings=512, embedding_dim=64, commitment_cost=0.25, decay=0.99):
         super(EmaVqVae, self).__init__()
         
         # ==========================================
@@ -102,7 +104,7 @@ class EmaVqVae(nn.Module):
         # ==========================================
         # 2. VECTOR QUANTIZER
         # ==========================================
-        self.quantizer = EmaVectorQuantizer(num_embeddings, embedding_dim)
+        self.quantizer = EmaVectorQuantizer(num_embeddings, embedding_dim, commitment_cost, decay)
 
         # ==========================================
         # 3. DECODER

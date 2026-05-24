@@ -1,89 +1,91 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
 import os
+import random
 
-# Import our project modules
-import config
-from dataset import AtariDataset
-from models.vqvae_simple import AtariVQVAE
+# Import your trained architecture
+from models.residual_vqvae import AtariResidualVQVAE
 
-def test_checkpoint(checkpoint_name="atari_vqvae_epoch_3.pth"):
-    """
-    Tests the visual fidelity and MSE of a specific model checkpoint.
-    """
-    print(f"🧪 Testing Checkpoint: {checkpoint_name}")
+def test_model_locally():
+    # ---------------------------------------------------------
+    # 1. SETUP PATHS (Update these to match your PC's folders!)
+    # ---------------------------------------------------------
+    MODEL_PATH = "old_checkpoints/vq_vae_collab/residual_vqvae_epoch_15.pth"
     
-    # 1. Setup Device
+    # Point this directly to ONE of your compressed .npz test files
+    TEST_DATA_PATH = "expert_dataset/test/IceHockeyNoFrameskip-v4_expert_50000_frames.npz" 
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"🖥️ Running inference on: {device}")
+
+    # ---------------------------------------------------------
+    # 2. LOAD THE MODEL
+    # ---------------------------------------------------------
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError(f"❌ Model not found at {MODEL_PATH}")
+        
+    print("🧠 Loading Residual VQ-VAE...")
+    model = AtariResidualVQVAE(num_embeddings=512, embedding_dim=64).to(device)
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    model.eval() # Freeze the model for testing
+    print("✅ Model loaded!")
+
+    # ---------------------------------------------------------
+    # 3. LOAD & PREPARE DATA (.npz Extraction)
+    # ---------------------------------------------------------
+    if not os.path.exists(TEST_DATA_PATH):
+        raise FileNotFoundError(f"❌ Test data not found at {TEST_DATA_PATH}")
+        
+    print("📦 Unpacking .npz file and loading sample frames...")
     
-    # 2. Initialize Model and Load Weights
-    # We use the same parameters as used in the training script
-    model = AtariVQVAE(in_channels=4, num_embeddings=512, embedding_dim=64).to(device)
+    # Extract the 'frames' array directly from the .npz archive
+    raw_data = np.load(TEST_DATA_PATH)['frames'] 
     
-    checkpoint_path = os.path.join("saved_models", checkpoint_name)
-    if not os.path.exists(checkpoint_path):
-        print(f"❌ File not found: {checkpoint_path}. Check your 'saved_models' folder.")
-        return
-
-    # Load the state dictionary
-    state_dict = torch.load(checkpoint_path, map_location=device, weights_only=True)
-    model.load_state_dict(state_dict)
+    # Pick 6 random sequences to look at
+    random_indices = random.sample(range(len(raw_data)), 6)
+    sample_data = raw_data[random_indices]
     
-    # CRITICAL: Set to evaluation mode
-    model.eval()
-    print("✅ Model weights loaded and set to EVAL mode.")
+    # Transpose from (Batch, H, W, Channels) to (Batch, Channels, H, W)
+    sample_data = np.transpose(sample_data, (0, 3, 1, 2))
+    
+    # Convert to Tensor and normalize to [0.0, 1.0]
+    batch = torch.tensor(sample_data, dtype=torch.float32).to(device) / 255.0
 
-    # 3. Prepare Test Data
-    # We pull from the TEST_DIR to see how well it generalizes to unseen games
-    # test_dataset = AtariDataset(config.TEST_DIR)
-    # test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
-    while True:
-        train_dataset = AtariDataset(config.TRAIN_DIR) # Using training data for the test to ensure we have data to visualize
-        train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
+    # ---------------------------------------------------------
+    # 4. RUN INFERENCE
+    # ---------------------------------------------------------
+    print("✨ Generating reconstructions...")
+    with torch.no_grad():
+        reconstructed, _ = model(batch)
 
-        # 4. Run Inference
-        # We use torch.no_grad() to save memory and skip gradient math
-        with torch.no_grad():
-            # Grab a random sample from an unseen game
-            original_frames = next(iter(train_loader)).to(device)
-            
-            # Pass through the VQ-VAE
-            reconstructed_frames, vq_loss = model(original_frames)
-            
-            # Calculate Reconstruction Error (MSE)
-            # Formula: MSE = (1/n) * sum((orig - recon)^2)
-            mse_error = torch.mean((original_frames - reconstructed_frames) ** 2)
-
-        print(f"📊 Quantitative Results:")
-        print(f"   - Reconstruction MSE: {mse_error.item():.6f}")
-        print(f"   - VQ Dictionary Loss: {vq_loss.item():.6f}")
-
-        # 5. Visualization Logic
-        # Convert tensors back to numpy arrays for plotting
-        # Shape: (1, 4, 84, 84) -> (4, 84, 84)
-        orig_np = original_frames.squeeze(0).cpu().numpy()
-        recon_np = reconstructed_frames.squeeze(0).cpu().numpy()
-
-        fig, axes = plt.subplots(2, 4, figsize=(15, 7))
-        plt.subplots_adjust(top=0.85)
-        fig.suptitle(f"Checkpoint Test: {checkpoint_name}\n(Top: Original | Bottom: VQ-VAE Reconstruction)", fontsize=16)
-
-        for i in range(4):
-            # Plot Original
-            axes[0, i].imshow(orig_np[i], cmap='gray')
-            axes[0, i].axis('off')
-            axes[0, i].set_title(f"Original F{i+1}")
-
-            # Plot Reconstructed
-            axes[1, i].imshow(recon_np[i], cmap='gray')
-            axes[1, i].axis('off')
-            axes[1, i].set_title(f"Recon F{i+1}")
-
-        print("\n🖼️ Displaying reconstruction plot...")
-        plt.show()
+    # ---------------------------------------------------------
+    # 5. VISUALIZE RESULTS
+    # ---------------------------------------------------------
+    # Move back to CPU and Numpy for Matplotlib
+    original_images = batch.cpu().numpy()
+    recon_images = reconstructed.cpu().numpy()
+    
+    fig, axes = plt.subplots(2, 6, figsize=(16, 6))
+    fig.suptitle("Top: Original Atari Frames | Bottom: Residual VQ-VAE Reconstructions", fontsize=16)
+    
+    for i in range(6):
+        # We grab index [3] to look at the most recent frame in the 4-frame stack
+        orig_frame = original_images[i][3] 
+        recon_frame = recon_images[i][3]
+        
+        # Plot Original
+        axes[0, i].imshow(orig_frame, cmap='gray')
+        axes[0, i].set_title(f"Original {i+1}")
+        axes[0, i].axis('off')
+        
+        # Plot Reconstruction
+        axes[1, i].imshow(recon_frame, cmap='gray')
+        axes[1, i].set_title(f"Reconstructed {i+1}")
+        axes[1, i].axis('off')
+        
+    plt.tight_layout()
+    plt.show() # Pops open the UI window on your monitor!
 
 if __name__ == "__main__":
-    # Ensure this matches the filename in your 'saved_models' folder
-    test_checkpoint("atari_vqvae_epoch_4.pth")
+    test_model_locally()

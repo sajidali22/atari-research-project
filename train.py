@@ -26,7 +26,12 @@ def train():
             "model_type": config.MODEL_TYPE,
             "learning_rate": config.LEARNING_RATE,
             "epochs": config.EPOCHS,
-            "batch_size": config.BATCH_SIZE
+            "batch_size": config.BATCH_SIZE,
+            "num_embeddings": config.NUM_EMBEDDINGS if config.MODEL_TYPE != 'standard_vae' else None,
+            "embedding_dim": config.EMBEDDING_DIM if config.MODEL_TYPE != 'standard_vae' else None,
+            "commitment_cost": config.COMMITMENT_COST if config.MODEL_TYPE != 'standard_vae' else None,
+            "decay": config.DECAY if config.MODEL_TYPE != 'standard_vae' else None,
+            
         }
     )
 
@@ -41,7 +46,9 @@ def train():
     elif config.MODEL_TYPE == 'residual_vqvae':
         model = AtariResidualVQVAE(
             num_embeddings=config.NUM_EMBEDDINGS, 
-            embedding_dim=config.EMBEDDING_DIM
+            embedding_dim=config.EMBEDDING_DIM,
+            commitment_cost=config.COMMITMENT_COST,
+            decay=config.DECAY
         ).to(device)
         
     else:
@@ -77,7 +84,7 @@ def train():
                 )
                 loss_name = "KL Divergence"
                 
-            elif config.MODEL_TYPE == 'ema_vqvae':
+            elif config.MODEL_TYPE in ['ema_vqvae', 'residual_vqvae']:
                 reconstructed, vq_loss = model(batch)
                 recon_loss = torch.nn.functional.mse_loss(reconstructed, batch)
                 loss = recon_loss + vq_loss

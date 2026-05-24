@@ -21,6 +21,8 @@ MODEL_TYPE = 'residual_vqvae'
 # For EMA VQ-VAE
 NUM_EMBEDDINGS = 512  
 EMBEDDING_DIM = 64    
+COMMITMENT_COST: 0.25 
+DECAY: 0.99 
 
 # For Standard VAE only
 LATENT_DIM = 256
@@ -30,5 +32,5 @@ BETA = 1.0 # Weight of the KL-Divergence penalty
 # 4. Training Parameters
 # ==========================================
 BATCH_SIZE = 64
-LEARNING_RATE = 1e-4
-EPOCHS = 1
+LEARNING_RATE = 3e-4
+EPOCHS = 15

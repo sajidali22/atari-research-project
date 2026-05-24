@@ -39,7 +39,7 @@ class ResidualStack(nn.Module):
         return F.relu(x)
 
 class AtariResidualVQVAE(nn.Module):
-    def __init__(self, in_channels=4, num_embeddings=512, embedding_dim=64, num_hiddens=128, num_residual_hiddens=32, num_residual_layers=2):
+    def __init__(self, in_channels=4, num_embeddings=512, embedding_dim=64, num_hiddens=128, num_residual_hiddens=32, num_residual_layers=2, commitment_cost=0.25, decay=0.99):
         super(AtariResidualVQVAE, self).__init__()
         
         # ==========================================

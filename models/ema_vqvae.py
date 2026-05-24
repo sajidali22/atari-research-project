@@ -82,9 +82,9 @@ class EmaVectorQuantizer(nn.Module):
 
         return quantized, vq_loss
 
-class AtariEmaVqVae(nn.Module):
+class EmaVqVae(nn.Module):
     def __init__(self, in_channels=4, num_embeddings=512, embedding_dim=64):
-        super(AtariEmaVqVae, self).__init__()
+        super(EmaVqVae, self).__init__()
         
         # ==========================================
         # 1. ENCODER 

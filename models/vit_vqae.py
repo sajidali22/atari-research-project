@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from vqvae_simple import VectorQuantizer # Reusing our perfected quantizer!
+from models.vqvae_simple import VectorQuantizer # Reusing our perfected quantizer!
 
 class ViTEncoder(nn.Module):
     """

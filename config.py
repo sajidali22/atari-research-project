@@ -3,22 +3,22 @@ import os
 # ==========================================
 # 1. Directory Settings
 # ==========================================
-TRAIN_DIR = "atari_train_dataset"
-TEST_DIR = "atari_test_dataset"
-SAVE_DIR = "saved_models"
+TRAIN_DIR = "expert_dataset/train"
+TEST_DIR = "expert_dataset/test"
+SAVE_DIR = "saved_models" 
 
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 # ==========================================
 # 2. Model Architecture Selection
 # ==========================================
-# CHOOSE ONE: 'vae', 'vqvae_simple', 'vqvae_residual', 'vit_vqvae'
-MODEL_TYPE = 'vqvae_residual' 
+# Options: 'standard_vae', 'ema_vqvae'
+MODEL_TYPE = 'standard_vae' 
 
 # ==========================================
 # 3. Architecture Specific Hyperparameters
 # ==========================================
-# For VQ-VAEs (Simple, Residual, ViT)
+# For EMA VQ-VAE
 NUM_EMBEDDINGS = 512  
 EMBEDDING_DIM = 64    
 
@@ -27,8 +27,8 @@ LATENT_DIM = 256
 BETA = 1.0 # Weight of the KL-Divergence penalty
 
 # ==========================================
-# 4. Universal Training Hyperparameters
+# 4. Training Parameters
 # ==========================================
 BATCH_SIZE = 64
 LEARNING_RATE = 1e-4
-EPOCHS = 10
+EPOCHS = 1

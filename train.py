@@ -8,17 +8,12 @@ from tqdm import tqdm
 import config
 from dataset import AtariDataset
 
-# ---------------------------------------------------------
-# IMPORT ASSUMPTIONS:
-# Make sure your files are named like this so imports work, 
-# or change the file names below to match your setup!
-# ---------------------------------------------------------
-from models.vae import AtariVAE, vae_loss_function
-from models.vqvae_simple import AtariVQVAE as SimpleVQVAE
-from models.vqvae_residual import AtariVQVAE as ResidualVQVAE
-from models.vit_vqae import AdvancedViTVQVAE
+# 🚨 Import our fresh, clean models!
+from models.standard_vae import StandardVAE, standard_vae_loss
+from models.ema_vqvae import EmaVqVae
 
 def train():
+    # Will safely fall back to CPU as you requested
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"🖥️ Starting Training on device: {device}")
     
@@ -36,28 +31,27 @@ def train():
 
     # 2. Dynamic Model Loading
     print(f"🧠 Initializing Model Type: {config.MODEL_TYPE.upper()}")
-    if config.MODEL_TYPE == 'vae':
-        model = AtariVAE(latent_dim=config.LATENT_DIM).to(device)
+    if config.MODEL_TYPE == 'standard_vae':
+        model = StandardVAE(latent_dim=config.LATENT_DIM).to(device)
         
-    elif config.MODEL_TYPE == 'vqvae_simple':
-        model = SimpleVQVAE(num_embeddings=config.NUM_EMBEDDINGS, embedding_dim=config.EMBEDDING_DIM).to(device)
-        
-    elif config.MODEL_TYPE == 'vqvae_residual':
-        model = ResidualVQVAE(num_embeddings=config.NUM_EMBEDDINGS, embedding_dim=config.EMBEDDING_DIM).to(device)
-        
-    elif config.MODEL_TYPE == 'vit_vqvae':
-        model = AdvancedViTVQVAE(num_embeddings=config.NUM_EMBEDDINGS, embed_dim=256).to(device)
+    elif config.MODEL_TYPE == 'ema_vqvae':
+        model = EmaVqVae(num_embeddings=config.NUM_EMBEDDINGS, embedding_dim=config.EMBEDDING_DIM).to(device)
         
     else:
-        raise ValueError("Invalid MODEL_TYPE in config.py!")
+        raise ValueError(f"❌ Invalid MODEL_TYPE '{config.MODEL_TYPE}' in config.py!")
 
     # 3. Dataset and Optimizer
     train_dataset = AtariDataset(config.TRAIN_DIR)
-    train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True)
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=config.BATCH_SIZE, 
+        shuffle=True,
+        num_workers=2 # Keeps CPU feeding data quickly
+    )
     optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
 
-    # 4. The Smart Training Loop
-    print(f"🔥 Starting Training Loop for {config.EPOCHS} Epochs...")
+    # 4. Training Loop
+    print(f"🚀 Starting Training Loop for {config.EPOCHS} Epochs...")
     for epoch in range(1, config.EPOCHS + 1):
         model.train()
         total_epoch_loss = 0
@@ -68,48 +62,49 @@ def train():
             batch = batch.to(device)
             optimizer.zero_grad()
             
-            # --- CONDITIONAL MATH BASED ON MODEL TYPE ---
-            if config.MODEL_TYPE == 'vae':
-                # VAEs return Means and Log Variances
+            # --- Model Specific Loss Logic ---
+            if config.MODEL_TYPE == 'standard_vae':
                 reconstructed, mu, logvar = model(batch)
-                loss, recon_loss, extra_loss = vae_loss_function(
+                loss, recon_loss, extra_loss = standard_vae_loss(
                     reconstructed, batch, mu, logvar, beta=config.BETA
                 )
                 loss_name = "KL Divergence"
                 
-            else:
-                # All VQ-VAEs return the Dictionary Commitment Loss
+            elif config.MODEL_TYPE == 'ema_vqvae':
                 reconstructed, vq_loss = model(batch)
                 recon_loss = torch.nn.functional.mse_loss(reconstructed, batch)
                 loss = recon_loss + vq_loss
                 extra_loss = vq_loss
                 loss_name = "VQ Codebook Loss"
-            # --------------------------------------------
+            # ---------------------------------
             
+            # Backpropagation
             loss.backward()
             optimizer.step()
             
-            # Tracking and logging
+            # Tracking and live terminal logging
             total_epoch_loss += loss.item()
             loop.set_postfix({"Total Loss": f"{loss.item():.4f}"})
             
+            # Weights & Biases Logging (Every 50 batches)
             if batch_idx % 50 == 0:
                 wandb.log({
                     "Batch": batch_idx + (epoch - 1) * len(train_loader),
                     "Epoch": epoch,
                     "Total Loss": loss.item(),
-                    "Reconstruction Loss": recon_loss.item() if config.MODEL_TYPE != 'vae' else recon_loss.item() / config.BATCH_SIZE,
+                    "Reconstruction Loss": recon_loss.item() if config.MODEL_TYPE != 'standard_vae' else recon_loss.item() / config.BATCH_SIZE,
                     loss_name: extra_loss.item()
                 })
         
+        # Log average loss at the end of the epoch
         wandb.log({"Average Epoch Loss": total_epoch_loss / len(train_loader)})
         
-        # 5. Save Model
+        # 5. Save Checkpoint
         save_path = os.path.join(config.SAVE_DIR, f"{config.MODEL_TYPE}_epoch_{epoch}.pth")
         torch.save(model.state_dict(), save_path)
     
     wandb.finish()
-    print("Training fully completed!")
+    print("✅ Training fully completed!")
 
 if __name__ == "__main__":
     train()

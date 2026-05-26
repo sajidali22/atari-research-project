@@ -12,6 +12,7 @@ from dataset import AtariDataset
 from models.standard_vae import StandardVAE, standard_vae_loss
 from models.ema_vqvae import EmaVqVae
 from models.residual_vqvae import AtariResidualVQVAE, weighted_sprite_mse_loss
+from models.fsq_vae import AtariFSQVAE
 
 def train():
     # Will safely fall back to CPU as you requested
@@ -48,6 +49,9 @@ def train():
             decay=config.DECAY
         ).to(device)
         
+    elif config.MODEL_TYPE == 'fsq_vae':
+        model = AtariFSQVAE(fsq_levels=config.FSQ_LEVELS).to(device)
+        
     else:
         raise ValueError(f"❌ Invalid MODEL_TYPE '{config.MODEL_TYPE}' in config.py!")
 
@@ -71,7 +75,6 @@ def train():
         
         for batch_idx, batch in enumerate(loop):
             batch = batch.to(device)
-            optimizer.zero_grad()
             
             # --- Model Specific Loss Logic ---
             if config.MODEL_TYPE == 'standard_vae':
@@ -81,21 +84,22 @@ def train():
                 )
                 loss_name = "KL Divergence"
                 
-            elif config.MODEL_TYPE in ['ema_vqvae', 'residual_vqvae']:
+            elif config.MODEL_TYPE in ['ema_vqvae', 'residual_vqvae','fsq_vae']:
                 reconstructed, vq_loss = model(batch)
-                # recon_loss = torch.nn.functional.mse_loss(reconstructed, batch)
-                recon_loss = weighted_sprite_mse_loss(
-                    reconstructed, 
-                    batch, 
-                    multiplier=10.0, 
-                    threshold=0.01
-                )
+                recon_loss = torch.nn.functional.mse_loss(reconstructed, batch)
+                # recon_loss = weighted_sprite_mse_loss(
+                #     reconstructed, 
+                #     batch, 
+                #     multiplier=10.0, 
+                #     threshold=0.01
+                # )
                 loss = recon_loss + vq_loss
                 extra_loss = vq_loss
                 loss_name = "VQ Codebook Loss"
             # ---------------------------------
             
             # Backpropagation
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             

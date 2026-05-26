@@ -12,17 +12,21 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 # ==========================================
 # 2. Model Architecture Selection
 # ==========================================
-# Options: 'standard_vae', 'ema_vqvae', 'residual_vqvae
-MODEL_TYPE = 'residual_vqvae' 
+# Options: 'standard_vae', 'ema_vqvae', 'residual_vqvae', 'fsq_vae
+MODEL_TYPE = 'fsq_vae' 
 
 # ==========================================
 # 3. Architecture Specific Hyperparameters
 # ==========================================
+# For FSQ-VAE only
+FSQ_LEVELS = [8, 5, 5, 3]
+
+
 # For EMA VQ-VAE
 NUM_EMBEDDINGS = 512  
-EMBEDDING_DIM = 64    
-COMMITMENT_COST: 0.25 
-DECAY: 0.99 
+EMBEDDING_DIM = 64
+COMMITMENT_COST = 0.25
+DECAY = 0.99
 
 # For Standard VAE only
 LATENT_DIM = 256

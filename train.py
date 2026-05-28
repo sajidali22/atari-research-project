@@ -22,7 +22,7 @@ def train():
     # 1. Initialize Weights & Biases
     wandb.init(
         project="atari-universal-feature-extractor",
-        name=f"run-{config.MODEL_TYPE}_weighted_loss",
+        name=f"run-{config.MODEL_TYPE}",
         config={
             "model_type": config.MODEL_TYPE,
             "learning_rate": config.LEARNING_RATE,
@@ -63,7 +63,12 @@ def train():
         shuffle=True,
         num_workers=2 # Keeps CPU feeding data quickly
     )
-    optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
+    
+    test_dataset = AtariDataset(config.TEST_DIR)
+    test_loader = DataLoader(test_dataset, batch_size=config.BATCH_SIZE * 2, shuffle=False)
+    # optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.LEARNING_RATE, weight_decay=1e-4)
+
 
     # 4. Training Loop
     print(f"🚀 Starting Training Loop for {config.EPOCHS} Epochs...")
@@ -123,6 +128,29 @@ def train():
         # 5. Save Checkpoint
         save_path = os.path.join(config.SAVE_DIR, f"{config.MODEL_TYPE}_epoch_{epoch}.pth")
         torch.save(model.state_dict(), save_path)
+        
+        model.eval()  # Turn off dropout/batchnorm for evaluation
+        total_test_loss = 0.0
+        
+        with torch.no_grad():
+            for test_images in test_loader:
+                test_images = test_images.to(device)
+                
+                # Forward pass
+                reconstructed, _ = model(test_images)
+                
+                # Standard MSE Loss
+                test_loss = torch.nn.functional.mse_loss(reconstructed, test_images)
+                total_test_loss += test_loss.item()
+                
+        # Calculate average test loss for the epoch
+        avg_test_loss = total_test_loss / len(test_loader)
+
+        # Print the results so you can monitor them in the terminal
+        print(f"Epoch {epoch} Summary: Average Test Loss: {avg_test_loss:.4f}")
+
+        # (Optional) Log to Weights & Biases if you are using it
+        wandb.log({"Test Loss": avg_test_loss})
     
     wandb.finish()
     print("✅ Training fully completed!")

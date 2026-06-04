@@ -11,7 +11,7 @@ def test_model_locally():
     # ---------------------------------------------------------
     # 1. SETUP PATHS (Update these to match your PC's folders!)
     # ---------------------------------------------------------
-    MODEL_PATH = "old_checkpoints/vq_vae_collab/residual_vqvae_epoch_15.pth"
+    MODEL_PATH = "saved_models/fsq_vae_epoch_125.pth"
     
     # Point this directly to ONE of your compressed .npz test files
     TEST_DATA_PATH = "expert_dataset/test/IceHockeyNoFrameskip-v4_expert_50000_frames.npz" 

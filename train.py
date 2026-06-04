@@ -7,12 +7,18 @@ from tqdm import tqdm
 
 import config
 from dataset import AtariDataset
+import math
+
 
 # 🚨 Import our fresh, clean models!
 from models.standard_vae import StandardVAE, standard_vae_loss
 from models.ema_vqvae import EmaVqVae
 from models.residual_vqvae import AtariResidualVQVAE, weighted_sprite_mse_loss
-from models.fsq_vae import AtariFSQVAE
+# from models.fsq_vae import AtariFSQVAE
+from models.fsq_vae_decoder import AtariFSQVAE, balanced_sprite_mse_loss
+
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 def train():
     # Will safely fall back to CPU as you requested
@@ -22,7 +28,7 @@ def train():
     # 1. Initialize Weights & Biases
     wandb.init(
         project="atari-universal-feature-extractor",
-        name=f"run-{config.MODEL_TYPE}",
+        name=f"run-{config.MODEL_TYPE}_decoder_HPC",
         config={
             "model_type": config.MODEL_TYPE,
             "learning_rate": config.LEARNING_RATE,
@@ -54,6 +60,8 @@ def train():
         
     else:
         raise ValueError(f"❌ Invalid MODEL_TYPE '{config.MODEL_TYPE}' in config.py!")
+    
+    model = torch.compile(model)
 
     # 3. Dataset and Optimizer
     train_dataset = AtariDataset(config.TRAIN_DIR)
@@ -61,7 +69,9 @@ def train():
         train_dataset, 
         batch_size=config.BATCH_SIZE, 
         shuffle=True,
-        num_workers=2 # Keeps CPU feeding data quickly
+        num_workers=4, # Keeps CPU feeding data quickly
+        pin_memory=True,
+        prefetch_factor=2
     )
     
     test_dataset = AtariDataset(config.TEST_DIR)
@@ -69,7 +79,35 @@ def train():
     # optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LEARNING_RATE, weight_decay=1e-4)
 
+    # 3. Wrap the Optimizer in the Scheduler
+    # 2. Calculate steps based on your 125 total epochs
+    steps_per_epoch = len(train_loader)
+    constant_epochs = 100
+    decay_epochs = config.EPOCHS - constant_epochs # Should be 25
 
+    # Phase 1: Keep LR completely flat at 3e-4 for the first 100 epochs
+    scheduler1 = torch.optim.lr_scheduler.ConstantLR(
+        optimizer, 
+        factor=1.0, 
+        total_iters=constant_epochs * steps_per_epoch
+    )
+
+    # Phase 2: Cosine decay down to 1e-5 for the remaining 25 epochs
+    scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, 
+        T_max=decay_epochs * steps_per_epoch, 
+        eta_min=1e-5
+    )
+
+    # 3. Chain them together using SequentialLR
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer, 
+        schedulers=[scheduler1, scheduler2], 
+        milestones=[constant_epochs * steps_per_epoch]
+    )
+
+    scaler = torch.amp.GradScaler('cuda')
+    
     # 4. Training Loop
     print(f"🚀 Starting Training Loop for {config.EPOCHS} Epochs...")
     for epoch in range(1, config.EPOCHS + 1):
@@ -80,7 +118,8 @@ def train():
         
         for batch_idx, batch in enumerate(loop):
             batch = batch.to(device)
-            
+            optimizer.zero_grad()
+
             # --- Model Specific Loss Logic ---
             if config.MODEL_TYPE == 'standard_vae':
                 reconstructed, mu, logvar = model(batch)
@@ -90,23 +129,28 @@ def train():
                 loss_name = "KL Divergence"
                 
             elif config.MODEL_TYPE in ['ema_vqvae', 'residual_vqvae','fsq_vae']:
-                reconstructed, vq_loss = model(batch)
-                recon_loss = torch.nn.functional.mse_loss(reconstructed, batch)
-                # recon_loss = weighted_sprite_mse_loss(
-                #     reconstructed, 
-                #     batch, 
-                #     multiplier=10.0, 
-                #     threshold=0.01
-                # )
-                loss = recon_loss + vq_loss
-                extra_loss = vq_loss
-                loss_name = "VQ Codebook Loss"
-            # ---------------------------------
+                with torch.amp.autocast('cuda', dtype=torch.bfloat16):
+                    reconstructed, vq_loss = model(batch)
+                    # recon_loss = torch.nn.functional.mse_loss(reconstructed, batch)
+                    recon_loss = balanced_sprite_mse_loss(
+                            reconstructed, 
+                            batch,
+                            threshold=0.05,       # Adjust to 0.1 if your images are scaled [-1, 1]
+                            moving_weight=0.85    # 85% of gradient focus on moving pixels
+                        )
+                    loss = recon_loss + vq_loss
+                    extra_loss = vq_loss
+                    loss_name = "VQ Codebook Loss"
+                    # ---------------------------------
             
             # Backpropagation
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            
+            scheduler.step()
+            # loss.backward()
+            # optimizer.step()
             
             # Tracking and live terminal logging
             total_epoch_loss += loss.item()
@@ -114,7 +158,9 @@ def train():
             
             # Weights & Biases Logging (Every 50 batches)
             if batch_idx % 50 == 0:
+                current_lr = scheduler.get_last_lr()[0]
                 wandb.log({
+                    "Learning Rate": current_lr,
                     "Batch": batch_idx + (epoch - 1) * len(train_loader),
                     "Epoch": epoch,
                     "Total Loss": loss.item(),

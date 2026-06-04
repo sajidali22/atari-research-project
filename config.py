@@ -35,6 +35,6 @@ BETA = 1.0 # Weight of the KL-Divergence penalty
 # ==========================================
 # 4. Training Parameters
 # ==========================================
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 LEARNING_RATE = 3e-4
-EPOCHS = 15
+EPOCHS = 125

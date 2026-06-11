@@ -6,15 +6,17 @@ import random
 
 # Import your trained architecture
 from models.residual_vqvae import AtariResidualVQVAE
+# from models.fsq_vae import AtariFSQVAE
+from models.fsq_vae_decoder  import AtariFSQVAE
 
 def test_model_locally():
     # ---------------------------------------------------------
     # 1. SETUP PATHS (Update these to match your PC's folders!)
     # ---------------------------------------------------------
-    MODEL_PATH = "saved_models/fsq_vae_epoch_125.pth"
+    MODEL_PATH = "saved_models/fsq_vae_epoch_105.pth"
     
     # Point this directly to ONE of your compressed .npz test files
-    TEST_DATA_PATH = "expert_dataset/test/IceHockeyNoFrameskip-v4_expert_50000_frames.npz" 
+    TEST_DATA_PATH = "expert_dataset/train/RoadRunnerNoFrameskip-v4_expert_50000_frames.npz" 
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"🖥️ Running inference on: {device}")
@@ -25,9 +27,18 @@ def test_model_locally():
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"❌ Model not found at {MODEL_PATH}")
         
-    print("🧠 Loading Residual VQ-VAE...")
-    model = AtariResidualVQVAE(num_embeddings=512, embedding_dim=64).to(device)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    # print("🧠 Loading Residual VQ-VAE...")
+    # model = AtariResidualVQVAE(num_embeddings=512, embedding_dim=64).to(device)
+    model = AtariFSQVAE().to(device)
+    # model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    # 1. Load the raw checkpoint
+    state_dict = torch.load(MODEL_PATH, map_location=device)
+        
+        # 2. Strip the '_orig_mod.' prefix from all keys
+    clean_state_dict = {k.replace('_orig_mod.', ''): v for k, v in state_dict.items()}
+        
+        # 3. Load the clean dictionary into your local model
+    model.load_state_dict(clean_state_dict)
     model.eval() # Freeze the model for testing
     print("✅ Model loaded!")
 

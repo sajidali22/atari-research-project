@@ -1,0 +1,117 @@
+Here is a comprehensive research documentation and execution plan for your project. This document serves as the formal foundation for your thesis/report, grounding your experimental setup, configurations, and baseline parameters in established, peer-reviewed reinforcement learning frameworks.
+
+---
+
+# Empirical Evaluation Plan: Universal Feature Extractor for Atari Games
+
+## 1. Project Overview & Objectives
+
+The goal of this project is to evaluate whether a single, universally pre-trained discrete representation model (**Finite Scalar Quantization VAE**) can serve as a drop-in feature extractor across diverse Atari 2600 environments.
+
+This evaluation explicitly investigates:
+
+* **Downstream Performance:** Can frozen visual representations match or exceed the performance of representations learned from scratch?
+* **Training Efficiency:** Does freezing the convolutional backbone reduce overall wall-clock training time or sample complexity?
+* **Generalization:** Can a representation trained on a specific subset of games successfully generalize to entirely unseen environments?
+
+---
+
+## 2. Experimental Design & Game Splits
+
+To rigorously test interpolation (optimization) versus extrapolation (generalization), the 15 selected games are decoupled into two distinct operational sets.
+
+### Training Set (Representation Learning)
+
+The FSQ-VAE backbone was trained for **125 epochs** exclusively on expert trajectories ($50,000$ frames per game) harvested from the following 11 environments:
+
+* `BeamRiderNoFrameskip-v4`
+* `BreakoutNoFrameskip-v4`
+* `DemonAttackNoFrameskip-v4`
+* `EnduroNoFrameskip-v4`
+* `MsPacmanNoFrameskip-v4`
+* `PongNoFrameskip-v4`
+* `QbertNoFrameskip-v4`
+* `RiverraidNoFrameskip-v4`
+* `RoadRunnerNoFrameskip-v4`
+* `SeaquestNoFrameskip-v4`
+* `SpaceInvadersNoFrameskip-v4`
+
+### Evaluation Set (Zero-Shot Generalization Test)
+
+To evaluate out-of-distribution visual generalization, the frozen feature extractor will be tested on 4 environments completely missing from the VAE training data:
+
+* `AlienNoFrameskip-v4`
+* `AsteroidsNoFrameskip-v4`
+* `AtlantisNoFrameskip-v4`
+* `IceHockeyNoFrameskip-v4`
+
+---
+
+## 3. Benchmarking Framework & Canonical Sources
+
+To validate your approach without bias, your experimental runs must be evaluated against the standard **Nature CNN architecture** trained via **Proximal Policy Optimization (PPO)**.
+
+The baseline benchmarks and hyperparameters are sourced directly from **Stable-Baselines3 (SB3) RL Baselines3 Zoo**, which replicates and stabilizes the original configurations from OpenAI's *Proximal Policy Optimization Algorithms* (Schulman et al., 2017).
+
+### Canonical Hyperparameter Specification
+
+Your custom PPO heads running on top of your FSQ representations must match these configurations exactly to isolate the feature extractor as the single independent variable:
+
+| Hyperparameter | Value | Source Baseline Reference |
+| --- | --- | --- |
+| **Total Timesteps** | `10,000,000` ($10\text{M}$) | SB3 Atari Benchmark Standard |
+| **Number of Envs (`n_envs`)** | `8` (Vectorized) | Schulman et al., 2017 / SB3 Zoo |
+| **Rollout Steps (`n_steps`)** | `128` per environment | Schulman et al., 2017 / SB3 Zoo |
+| **Mini-batch Size** | `256` | SB3 Zoo Atari Config |
+| **Optimization Epochs** | `4` per rollout batch | Schulman et al., 2017 / SB3 Zoo |
+| **Base Learning Rate** | `2.5e-4` | Schulman et al., 2017 / SB3 Zoo |
+| **LR Schedule** | **Linear Decay** (down to `0.0`) | SB3 Zoo Atari Config |
+| **Discount Factor ($\gamma$)** | `0.99` | Standard Atari Horizon |
+| **GAE Parameter ($\lambda$)** | `0.95` | Schulman et al., 2017 |
+| **Clip Parameter ($\epsilon$)** | `0.1` | SB3 Zoo Atari Config |
+| **Entropy Coef (`ent_coef`)** | `0.01` | Exploration Regularization Standard |
+| **Value Function Coef** | `0.5` | Critic Loss Scaling |
+| **Gradient Clipping** | `0.5` (`max_grad_norm`) | Optimization Stability |
+
+> **Source Verification Registry:**
+> * **PPO Algorithm:** Schulman, J., Wolski, F., Dhariwal, P., Radford, A., & Klimov, O. (2017). *Proximal Policy Optimization Algorithms*. arXiv preprint arXiv:1707.06347.
+> * **Hyperparameter Configs:** Stable-Baselines3 RL Baselines3 Zoo (`rl_zoo3/cfg/ppo.yml`). Checkpoints hosted under the official `sb3` organization on Hugging Face.
+> 
+> 
+
+---
+
+## 4. Step-by-Step HPC Implementation Plan
+
+To run these 15 games across your architectures in parallel on your cluster, follow this execution sequence:
+
+```
+[HPC Cluster Storage]
+ └── /configs/
+      ├── fsq_vae_frozen.yaml
+      └── nature_cnn_baseline.yaml
+ └── /models/
+      ├── factory.py (Dynamic backbone loading)
+      └── ppo_core.py (Actor-Critic heads)
+ └── train_pipeline.py (Unified runner script)
+ └── slurm_array_worker.sh (HPC scheduler controller)
+
+```
+
+### Step 1: Establish Your Baseline Comparison Metrics
+
+Instead of spending computational budget training the baseline environments from scratch, download the evaluation tracking logs directly from the SB3 repository or pull down their pre-trained weights to capture their final performance thresholds. This gives you an immediate target boundary curve.
+
+### Step 2: Deploy the Frozen Representation Run
+
+Execute your SLURM Job Array using the `fsq_vae_frozen.yaml` config file. This locks your 125-epoch FSQ-VAE convolutional parameters. The PPO algorithm will exclusively adjust the weights of the Linear policy layers sitting on top of the static $1764$-dimensional flattened grid feature vector.
+
+### Step 3: Parse Data for Key Research Findings
+
+Once your jobs complete, pull your compiled Weights & Biases metrics to explicitly answer the primary research questions:
+
+1. **Convergence Velocity:** Does the PPO + Frozen FSQ agent hit higher rewards earlier in the $10\text{M}$ timeline compared to the baseline? (Proving representation readiness).
+2. **Wall-Clock Throughput:** Compare the global Frames Per Second (FPS). Your configuration should run significantly faster because backpropagation stops before reaching the convolutional layers.
+3. **The Unseen Frontier (Generalization):** Closely observe the performance curves on the `TEST_GAMES` (e.g., *Alien*, *Asteroids*). If the frozen model outpaces or cleanly matches the baseline here, your thesis successfully demonstrates generalized visual understanding across the Atari domain.
+
+With your game splits completely locked in and your parameters anchored to official baselines, your experimental framework is scientifically sound. Would you like to map out the clean YAML files for both your baseline configuration and your frozen FSQ-VAE run next?

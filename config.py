@@ -3,8 +3,8 @@ import os
 # ==========================================
 # 1. Directory Settings
 # ==========================================
-TRAIN_DIR = "expert_dataset/train"
-TEST_DIR = "expert_dataset/test"
+TRAIN_DIR = "atari-DQN/custom_datasets/train"
+TEST_DIR = "atari-DQN/custom_datasets/test"
 SAVE_DIR = "saved_models" 
 
 os.makedirs(SAVE_DIR, exist_ok=True)

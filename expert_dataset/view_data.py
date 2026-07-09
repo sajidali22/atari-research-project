@@ -12,6 +12,9 @@ def inspect_and_visualize(file_path):
     
     # 1. Inspect and PRINT the shape
     print(f"--- Dataset shape: {frames.shape} ---")
+    print("Minimum value:", frames.min())
+    print("Maximum value:", frames.max())
+    print("Data type:    ", frames.dtype)
     
     sample_stack = frames[4800] # Shape is (4, 84, 84)
     

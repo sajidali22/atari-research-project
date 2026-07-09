@@ -5,10 +5,8 @@ import ale_py
 import numpy as np
 import config 
 
-# Silence ALSA audio warnings
 os.environ["SDL_AUDIODRIVER"] = "dummy"
 
-# Register the ALE namespace for Gymnasium
 gym.register_envs(ale_py)
 
 def collect_atari_frames(game_name, output_dir):
@@ -20,12 +18,11 @@ def collect_atari_frames(game_name, output_dir):
     
     # Safety check: Rendering is very slow for large datasets
     if config.RENDER_GAME:
-        print(f"⚠️  Note: RENDER_GAME is True. This will significantly slow down collection.")
+        print(f"RENDER_GAME is True.")
     
     env_id = f"ALE/{game_name}-v5"
     render = "human" if config.RENDER_GAME else None
     
-    # Initialize Environment
     env = gym.make(env_id, frameskip=1, render_mode=render)
     env = gym.wrappers.AtariPreprocessing(
         env, frame_skip=4, grayscale_obs=config.GRAYSCALE_MODE, screen_size=84, scale_obs=False
@@ -37,10 +34,9 @@ def collect_atari_frames(game_name, output_dir):
     chunk_counter = 1
     
     # --- Progress Bar with Game Name ---
-    # We use the 'desc' argument to show which game is currently running.
     pbar = tqdm.tqdm(
         total=config.TOTAL_STEPS, 
-        desc=f"🎮 {game_name.ljust(15)}", # .ljust(15) keeps the bars aligned
+        desc=f"{game_name.ljust(15)}",
         unit="frame",
         colour="green"
     )
@@ -64,7 +60,6 @@ def collect_atari_frames(game_name, output_dir):
             
             np.save(file_path, dataset)
             
-            # Use pbar.write so the text doesn't interfere with the bar
             pbar.write(f"   ✅ Saved {file_name}")
             
             frames_chunk = []
@@ -74,7 +69,7 @@ def collect_atari_frames(game_name, output_dir):
     env.close()
 
 if __name__ == "__main__":
-    print(f"🚀 Starting Collection | Steps: {config.TOTAL_STEPS} | Mode: {'Gray' if config.GRAYSCALE_MODE else 'RGB'}")
+    print(f"Starting Collection | Steps: {config.TOTAL_STEPS} | Mode: {'Gray' if config.GRAYSCALE_MODE else 'RGB'}")
     
     # Loop through Training Games
     for game in config.TRAIN_GAMES:
@@ -84,4 +79,4 @@ if __name__ == "__main__":
     for game in config.TEST_GAMES:
         collect_atari_frames(game, config.TEST_DIR)
         
-    print("\n🎉 All datasets have been successfully collected and saved.")
+    print("\nAll datasets have been successfully collected and saved.")

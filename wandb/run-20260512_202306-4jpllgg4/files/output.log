@@ -1,9 +1,0 @@
-🖥️  Using device: cpu
-📂 Loading dataset...
-📂 Mapping 44 files from atari_train_dataset...
-✅ Dataset ready! Total frames available: 1100000
-
-🔥 Starting VQ-VAE Training Loop...
-Epoch [1/1]:   0%|                                                                                                                                                               | 10/17188 [00:00<26:24, 10.84batch/s, Total Loss=0.1399]
-
-✅ Epoch 1 Test Complete!

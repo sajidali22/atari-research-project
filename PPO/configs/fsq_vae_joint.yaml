@@ -1,0 +1,24 @@
+env:
+  # id: "PongNoFrameskip-v4"
+  total_timesteps: 10000000
+  num_steps: 128
+  num_envs: 8
+
+extractor:
+  arch_type: "FSQ-VAE"
+  checkpoint_path: "old_checkpoints/fsq_vae_decoder/fsq_vae_epoch_125.pth"
+  feature_dim: 1764          # 4 channels * 21 * 21
+  freeze_weights: false
+
+ppo:
+  lr: 0.00025
+  batch_size: 256
+  n_epochs: 4
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_coef: 0.1
+  ent_coef: 0.01
+  vf_coef: 0.5
+
+logging:
+  project_name: "Atari-Universal-Feature-Extractor"

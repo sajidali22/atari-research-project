@@ -2,3 +2,4 @@
 colab_api.txt
 __pycache__
 wandb
+logs

@@ -23,18 +23,29 @@ FSQ_LEVELS = [8, 5, 5, 3]
 
 
 # For EMA VQ-VAE
-NUM_EMBEDDINGS = 512  
-EMBEDDING_DIM = 64
-COMMITMENT_COST = 0.25
-DECAY = 0.99
+# NUM_EMBEDDINGS = 512  
+# EMBEDDING_DIM = 64
+# COMMITMENT_COST = 0.25
+# DECAY = 0.99
 
 # For Standard VAE only
-LATENT_DIM = 256
-BETA = 1.0 # Weight of the KL-Divergence penalty
+# LATENT_DIM = 256
+# BETA = 1.0 # Weight of the KL-Divergence penalty
 
 # ==========================================
 # 4. Training Parameters
 # ==========================================
-BATCH_SIZE = 128
-LEARNING_RATE = 3e-4
-EPOCHS = 125
+# BATCH_SIZE = 128
+# LEARNING_RATE = 3e-4
+# EPOCHS = 125
+
+
+
+# ##For JEPA
+# batch_size = 256
+# learning_rate = 1e-4
+# weight_decay = 1e-5
+# tau_ema = 0.996
+# latent_dim = 256
+# max_grad_norm = 1.0
+# epochs = 15

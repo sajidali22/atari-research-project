@@ -37,7 +37,7 @@ def train_jepa():
         train_dataset, 
         batch_size=wandb.config.batch_size, 
         shuffle=True, 
-        num_workers=8, 
+        num_workers=4, 
         pin_memory=True       
     )
 
@@ -55,7 +55,7 @@ def train_jepa():
         weight_decay=wandb.config.weight_decay
     )
 
-    save_dir = "checkpoints"
+    save_dir = "jepa_checkpoints"
     os.makedirs(save_dir, exist_ok=True)
     global_step = 0
 
@@ -70,8 +70,21 @@ def train_jepa():
         for batch in pbar:
             batch = {k: v.to(device) for k, v in batch.items()}
             
-            # Forward & Loss
-            loss = model(batch)
+            # --- Forward Pass ---
+            z_pred, z_target, z_context = model(batch, return_latents=True)
+            
+            # --- 1. Masked JEPA Physics Loss ---
+            # --- 1. Masked JEPA Physics Loss ---
+            raw_mse = torch.nn.functional.mse_loss(z_pred, z_target, reduction='none')
+            mse_per_item = raw_mse.mean(dim=[1, 2])
+            jepa_loss = (mse_per_item * batch["mask"]).sum() / batch["mask"].sum().clamp(min=1.0)
+
+            # --- 2. Masked Inverse Dynamics Loss ---
+            raw_inv_loss = model.compute_inverse_loss(z_context, z_target, batch["a_t"])
+            inv_loss = (raw_inv_loss * batch["mask"]).sum() / batch["mask"].sum().clamp(min=1.0)
+
+            # --- 3. Combined Objective ---
+            loss = jepa_loss + (0.1 * inv_loss)
             
             # Backpropagation
             optimizer.zero_grad()
@@ -83,9 +96,11 @@ def train_jepa():
             optimizer.step()
             model.update_target_network()
             
-            # W&B Step Logging
+            # --- W&B Step Logging (Upgraded) ---
             wandb.log({
-                "train/step_loss": loss.item(),
+                "train/total_loss": loss.item(),
+                "train/jepa_physics_loss": jepa_loss.item(),
+                "train/inverse_action_loss": inv_loss.item(), # Monitor this strictly!
                 "train/global_step": global_step,
                 "train/epoch": epoch
             })

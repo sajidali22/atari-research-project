@@ -141,6 +141,13 @@ class PaperAccurateJEPA(nn.Module):
         # This forces the network to learn predictive representations instead of collapsing.
         for param in self.target_encoder.parameters():
             param.requires_grad = False
+            
+        self.inverse_head = nn.Sequential(
+            nn.Linear(embed_dim * 2, 256),
+            nn.GELU(),
+            nn.Linear(256, num_actions)
+        )
+
 
     @torch.no_grad() # Decorator ensures no memory is wasted tracking gradients during this step
     def update_target_network(self):
@@ -153,38 +160,86 @@ class PaperAccurateJEPA(nn.Module):
             # Using in-place operations (.mul_ and .add_) prevents memory fragmentation on the GPU
             param_target.data.mul_(self.tau).add_(param_context.data, alpha=1.0 - self.tau)
 
-    def forward(self, batch):
+    # def forward(self, batch):
+    #     # Extract components from the Dataloader batch dictionary
+    #     s_t = batch["s_t"]          # [Batch, 4, 84, 84]
+    #     a_t = batch["a_t"]          # [Batch]
+    #     s_next = batch["s_next"]    # [Batch, 4, 84, 84]
+    #     mask = batch["mask"]        # [Batch]
+        
+    #     # 1. Encode the current frame stack into latent patches
+    #     z_t = self.context_encoder(s_t) # [Batch, 36, 256]
+        
+    #     # 2. Encode the target frame stack. 
+    #     # Wrapped in torch.no_grad() as a secondary safety measure against graph leaks.
+    #     with torch.no_grad():
+    #         z_next_target = self.target_encoder(s_next) # [Batch, 36, 256]
+            
+    #     # 3. Emulate the world dynamics to predict the future state
+    #     z_next_pred = self.predictor(z_t, a_t) # [Batch, 36, 256]
+        
+    #     # 4. Dense L2 Distance Loss Calculation
+    #     # reduction="none" leaves the tensor at shape [Batch, 36, 256].
+    #     # .mean(dim=[1, 2]) averages the MSE across all 36 spatial patches and all 256 feature dimensions.
+    #     # This collapses the shape down to [Batch], providing exactly one scalar loss value per transition.
+    #     loss_per_batch = F.mse_loss(z_next_pred, z_next_target, reduction="none").mean(dim=[1, 2])
+        
+    #     # 5. Terminal State Masking
+    #     # We multiply by the batch mask (0.0 if episode ended, 1.0 if alive).
+    #     # Why: It is impossible for the model to predict the start of a brand new game based on 
+    #     # the end of a previous game. This mask neutralizes the loss on terminal steps so the 
+    #     # gradients aren't corrupted by unpredictable transitions.
+    #     masked_loss = (loss_per_batch * mask).sum() / (mask.sum() + 1e-8)
+        
+    #     return masked_loss
+    
+    def forward(self, batch, return_latents=False):
         # Extract components from the Dataloader batch dictionary
         s_t = batch["s_t"]          # [Batch, 4, 84, 84]
         a_t = batch["a_t"]          # [Batch]
         s_next = batch["s_next"]    # [Batch, 4, 84, 84]
-        mask = batch["mask"]        # [Batch]
+        mask = batch.get("mask", None) # Safe fallback if mask isn't provided
         
         # 1. Encode the current frame stack into latent patches
         z_t = self.context_encoder(s_t) # [Batch, 36, 256]
         
         # 2. Encode the target frame stack. 
-        # Wrapped in torch.no_grad() as a secondary safety measure against graph leaks.
         with torch.no_grad():
             z_next_target = self.target_encoder(s_next) # [Batch, 36, 256]
             
         # 3. Emulate the world dynamics to predict the future state
         z_next_pred = self.predictor(z_t, a_t) # [Batch, 36, 256]
         
-        # 4. Dense L2 Distance Loss Calculation
-        # reduction="none" leaves the tensor at shape [Batch, 36, 256].
-        # .mean(dim=[1, 2]) averages the MSE across all 36 spatial patches and all 256 feature dimensions.
-        # This collapses the shape down to [Batch], providing exactly one scalar loss value per transition.
+        # --- NEW API SUPPORT FOR TRAIN.PY ---
+        if return_latents:
+            # Returns the raw tensors so train.py can apply masking and inverse loss
+            return z_next_pred, z_next_target, z_t
+        
+        # --- FALLBACK (For dummy testing at the bottom of the script) ---
         loss_per_batch = F.mse_loss(z_next_pred, z_next_target, reduction="none").mean(dim=[1, 2])
+        if mask is not None:
+            masked_loss = (loss_per_batch * mask).sum() / (mask.sum() + 1e-8)
+            return masked_loss
+        return loss_per_batch.mean()
+    
+    def compute_inverse_loss(self, z_current, z_next, true_actions):
+        """
+        Forces the latent space to encode enough information to deduce 
+        which action caused the transition between two states.
+        """
+        # z_current and z_next shape: [Batch, Sequence_Length, Embed_Dim]
+        # We pool across the spatial/sequence dimension to get a global state vector
+        z_c_pooled = z_current.mean(dim=1) # Shape: [Batch, Embed_Dim]
+        z_n_pooled = z_next.mean(dim=1)    # Shape: [Batch, Embed_Dim]
         
-        # 5. Terminal State Masking
-        # We multiply by the batch mask (0.0 if episode ended, 1.0 if alive).
-        # Why: It is impossible for the model to predict the start of a brand new game based on 
-        # the end of a previous game. This mask neutralizes the loss on terminal steps so the 
-        # gradients aren't corrupted by unpredictable transitions.
-        masked_loss = (loss_per_batch * mask).sum() / (mask.sum() + 1e-8)
+        # Concatenate the before and after states
+        combined_states = torch.cat([z_c_pooled, z_n_pooled], dim=-1) # Shape: [Batch, Embed_Dim * 2]
         
-        return masked_loss
+        # Predict the action logits
+        action_logits = self.inverse_head(combined_states)
+        
+        # Return standard Cross Entropy against the actual joystick inputs
+        return torch.nn.functional.cross_entropy(action_logits, true_actions, reduction='none')
 
 if __name__ == "__main__":
     # Standard dummy test to verify architecture compiles and runs before throwing it at the GPU

@@ -5,6 +5,8 @@ import os
 # ==========================================
 TRAIN_DIR = "atari-DQN/custom_datasets/train"
 TEST_DIR = "atari-DQN/custom_datasets/test"
+VAL_DIR = "atari-DQN/custom_datasets/val"
+
 SAVE_DIR = "saved_models" 
 
 os.makedirs(SAVE_DIR, exist_ok=True)

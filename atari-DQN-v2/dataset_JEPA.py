@@ -27,11 +27,21 @@ class AtariTransitionDataset(Dataset):
        RIGHT in Seaquest (finding D2). A per-shard lookup table remaps them once at
        load, making the shared action embedding coherent.
 
-    Emits: s_t [4,84,84] float, a_t long (canonical), s_next [4,84,84] float,
+    Emits: s_t [4,84,84], a_t long (canonical), s_next [4,84,84],
            mask float (0 at terminals), g_t long (env slot id).
+
+    Frames are emitted as **uint8** by default and normalised on the GPU (see
+    JEPA.to_float). Converting to float32 here would quadruple the bytes crossing the
+    worker->main-process IPC boundary and the host->device copy (56 KB -> 226 KB per
+    sample) and spend worker CPU doing it. This job is data-bound, so that conversion
+    is the single most expensive avoidable thing in the pipeline. Pass dtype="float32"
+    to restore the old behaviour for debugging.
     """
 
-    def __init__(self, data_dir, require_known_games=True):
+    def __init__(self, data_dir, require_known_games=True, dtype="uint8"):
+        if dtype not in ("uint8", "float32"):
+            raise ValueError(f"dtype must be 'uint8' or 'float32', got {dtype!r}")
+        self.dtype = dtype
         self.data_dir = data_dir
 
         # Sorted so shard order -- and therefore index -> game mapping -- is
@@ -158,10 +168,16 @@ class AtariTransitionDataset(Dataset):
         # Minimal action index -> canonical ALE-18 index.
         canonical_action = int(self.file_luts[file_idx][int(raw_action)])
 
+        s_t = torch.from_numpy(np.ascontiguousarray(raw_obs))
+        s_next = torch.from_numpy(np.ascontiguousarray(raw_next_obs))
+        if self.dtype == "float32":
+            s_t = s_t.float().div_(255.0)
+            s_next = s_next.float().div_(255.0)
+
         return {
-            "s_t": torch.from_numpy(np.ascontiguousarray(raw_obs)).float().div_(255.0),
+            "s_t": s_t,
             "a_t": torch.tensor(canonical_action, dtype=torch.long),
-            "s_next": torch.from_numpy(np.ascontiguousarray(raw_next_obs)).float().div_(255.0),
+            "s_next": s_next,
             "mask": torch.tensor(0.0 if is_terminal else 1.0, dtype=torch.float32),
             "g_t": torch.tensor(self.file_game_ids[file_idx], dtype=torch.long),
         }

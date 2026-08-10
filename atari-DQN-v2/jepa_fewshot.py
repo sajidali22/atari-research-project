@@ -37,7 +37,7 @@ from torch.utils.data import DataLoader, Subset
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
 import games as gamelib
-from JEPA import PaperAccurateJEPA
+from JEPA import PaperAccurateJEPA, strip_compile_prefix
 from dataset_JEPA import AtariTransitionDataset
 
 
@@ -126,7 +126,7 @@ def evaluate(model, loader, device, env_id):
 def build_model(ckpt, device, fresh=False):
     model = PaperAccurateJEPA(**ckpt["model_config"]).to(device)
     if not fresh:
-        model.load_state_dict(ckpt["model_state_dict"])
+        model.load_state_dict(strip_compile_prefix(ckpt["model_state_dict"]))
     return model
 
 

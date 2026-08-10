@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+production_checkpoints/
+results/
+wandb/
+# derived from the .npz shards on first dataset load; large and regenerable
+.npy_cache/

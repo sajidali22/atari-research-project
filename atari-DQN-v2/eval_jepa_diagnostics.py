@@ -58,7 +58,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Imported as `gamelib` because this module already uses `games` as a local variable
 # for the per-sequence list of game names.
 import games as gamelib
-from JEPA import PaperAccurateJEPA
+from JEPA import PaperAccurateJEPA, strip_compile_prefix
 from dataset_JEPA import AtariTransitionDataset
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -202,7 +202,7 @@ def load_model(checkpoint_path, device):
             f"JEPA_v1.py with the v1 eval scripts instead."
         )
     model = PaperAccurateJEPA(**model_config).to(device)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    model.load_state_dict(strip_compile_prefix(checkpoint["model_state_dict"]))
     model.eval()
 
     print(f"  epoch (0-indexed): {checkpoint.get('epoch', '?')}")

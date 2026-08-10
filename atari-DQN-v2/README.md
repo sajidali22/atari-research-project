@@ -8,7 +8,8 @@ evaluation on unseen games possible.
 architecture and its checkpoints. The two `custom_datasets*` entries here are
 symlinks back to it — the data is shared, not duplicated.
 
-See [CHANGES.md](CHANGES.md) for the full v1 → v2 record.
+See [CHANGES.md](CHANGES.md) for the full v1 → v2 record, and [HPC.md](HPC.md) to run
+this on capella (three `sbatch` commands; the run sizes itself).
 
 ## What changed, and why
 

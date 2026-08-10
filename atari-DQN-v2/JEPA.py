@@ -40,6 +40,31 @@ import torch.nn.functional as F
 import games
 
 
+def to_float(x):
+    """Normalise uint8 frames to [0,1] floats; pass floats through untouched.
+
+    dataset_JEPA emits uint8 so the worker->main IPC and host->device copy carry 56 KB
+    per sample instead of 226 KB. This is the ONE place that conversion happens, so no
+    consumer can silently diverge -- every path that feeds pixels to an encoder goes
+    through here, whether via forward() or by calling context_encoder directly.
+    """
+    if x.dtype == torch.uint8:
+        return x.float().div_(255.0)
+    return x
+
+
+def strip_compile_prefix(state_dict):
+    """Drop the '_orig_mod.' prefix torch.compile adds to every parameter name.
+
+    jepa_train saves the uncompiled module, so this is normally a no-op -- it exists so
+    a checkpoint written by some other compiled path still loads. Same fix as
+    PPO/factory.py:53-57.
+    """
+    if not any(k.startswith("_orig_mod.") for k in state_dict):
+        return state_dict
+    return {k.replace("_orig_mod.", "", 1): v for k, v in state_dict.items()}
+
+
 class SimNorm(nn.Module):
     """Simplicial normalisation (TD-MPC2 Eq. 5).
 
@@ -120,7 +145,11 @@ class TransformerEncoder(nn.Module):
         self.simnorm = SimNorm(simnorm_V) if use_simnorm else nn.Identity()
 
     def forward(self, x, e):
-        # x: [B, 4, 84, 84]   e: [B, D] environment embedding vector
+        # x: [B, 4, 84, 84] uint8 or float   e: [B, D] environment embedding vector
+        # Normalisation lives here rather than in the dataset or in forward(), because
+        # every pixel path -- forward(), and the eval scripts that call the encoders
+        # directly -- necessarily passes through an encoder. Idempotent on floats.
+        x = to_float(x)
         x = self.patch_embed(x)                       # [B, 36, D]
         x = torch.cat([e.unsqueeze(1), x], dim=1)     # [B, 37, D]
         x = self.blocks(x)
@@ -374,9 +403,9 @@ if __name__ == "__main__":
     model = PaperAccurateJEPA(embed_dim=256, tau=0.995, use_simnorm=True, simnorm_V=V)
 
     batch = {
-        "s_t": torch.randn(B, 4, 84, 84),
+        "s_t": torch.randint(0, 256, (B, 4, 84, 84), dtype=torch.uint8),
         "a_t": torch.randint(0, 18, (B,)),
-        "s_next": torch.randn(B, 4, 84, 84),
+        "s_next": torch.randint(0, 256, (B, 4, 84, 84), dtype=torch.uint8),
         "mask": torch.ones(B),
         "g_t": torch.randint(0, games.NUM_TRAIN_GAMES, (B,)),
     }

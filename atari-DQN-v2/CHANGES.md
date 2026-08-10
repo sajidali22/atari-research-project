@@ -247,6 +247,26 @@ all five few-shot arms.
 - **Env-inference network** (predicting `e` from pixels). The `UNKNOWN` slot is the
   substitute.
 
+## 9. HPC readiness (added for the capella run)
+
+| Change | Why |
+|---|---|
+| Dataset emits **uint8**; normalisation moved into `TransformerEncoder.forward` via `to_float` | The job is data-bound. Converting in the worker pushed 226 KB/sample through IPC instead of 56 KB. One normalisation point means no caller can diverge — verified bit-identical to the float32 path. |
+| `--amp-dtype`, default **bf16** | `autocast` defaulted to fp16. bf16 on H100 needs no GradScaler and cannot underflow, which matters because SimNorm keeps the JEPA term small (~0.026 at init). |
+| `--resume` | A 12–18 h job that hit its wall clock previously lost everything. Restores model, optimizer, scheduler, epoch, `global_step`, `best_val_loss` and the W&B run id. No-op when no checkpoint exists, so a job script is safe to requeue verbatim. |
+| `--target-hours` auto-sizing | A ~200-step probe (real training) measures throughput, then fixes epochs, steps-per-epoch and the cosine horizon. The horizon must be known upfront or the LR never fully decays; this removes the need to compute it by hand on the cluster. |
+| `--max-hours` | Clean stop with a final checkpoint, instead of being killed mid-write. |
+| Linear **warmup** then cosine, stepped **per step** | Standard at this batch size and previously absent. Per-step because the epoch count is unknown until auto-sizing. |
+| **Weight-decay param groups** | Finding D4: decay on LayerNorm gains is an active collapse route (γ→0 ⇒ z→β). Decaying `env_embed` would also fight its `max_norm=1`. Exempts gains, biases, `pos_embed` and both embeddings. |
+| `--seed`, `--compile`, `strip_compile_prefix` | Reproducibility; compiled checkpoints stay loadable by eval and few-shot. |
+| `--sweep-tag` / `--inverse-weight auto` | Sweep arms write `sweep_result.json`; the main run reads the winner. Ranked on **information gain**, and arms with collapsed env embeddings are disqualified — a low loss with inert conditioning is not a win. |
+| `preflight.py`, `slurm/*.sh`, `HPC.md`, `verify_hpc_ready.py` | Cache building is 161 GB of CPU/IO and must not run inside a GPU job. 20 local checks cover every path before it ships. |
+
+Trap found while writing the job scripts: `job_c_main.sh` documented
+`sbatch --time=12:00:00` as a shorter allocation, but a hardcoded `--max-hours 15.6`
+would then overrun it and be killed. The script now reads its own SLURM end time via
+`scontrol` and derives the budget, so changing `--time` needs no other edit.
+
 ## Files removed from this folder
 
 Not deleted from the project — all still present in `../atari-DQN/`:

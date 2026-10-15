@@ -1,0 +1,79 @@
+% Data collection and training-time processing, used as \input{figures/data_pipeline}
+% Laid out at (close to) text width so that it is not scaled down: (a) pipeline with the two
+% corpora below it, (b) the four training-time steps as a 2x2 grid.
+{%
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw=cGray, rounded corners=2pt, align=center, inner sep=3pt, fill=white, minimum height=0.9cm},
+  arr/.style={-{Stealth[length=4pt]}, draw=black!70, line width=0.6pt},
+  fr/.style={draw=black!60, minimum width=0.8cm, minimum height=0.55cm, inner sep=0pt, font=\scriptsize},
+  lab/.style={font=\scriptsize, text=black!70},
+  ttl/.style={font=\scriptsize\bfseries, anchor=west}]
+
+  % =========================================================== (a) collection
+  \node[ttl] at (-1.35,3.55) {(a) Collection};
+  \node[box, fill=gray!8, text width=2.2cm] (hub) at (-0.1,2.2)
+    {HuggingFace Hub\\pre-trained expert,\\one per game\\(PPO / DQN / A2C)};
+  \node[box, text width=3.1cm] (env) at (3.4,2.2)
+    {\textbf{ALE v5}, sticky actions off\\SB3 Atari wrappers: no-op reset, frame-skip 4 + max-pool, $84{\times}84$ grey};
+  \node[box, text width=1.2cm] (stk) at (6.4,2.2) {stack last\\4 frames\\$s_t$};
+  \node[box, text width=2.3cm] (pol) at (8.75,2.2) {$a_t\sim\pi_{\text{expert}}(\cdot\,|\,s_t)$\\sampled, not greedy};
+  \draw[arr] (hub) -- (env); \draw[arr] (env) -- (stk); \draw[arr] (stk) -- (pol);
+  \draw[arr] (pol.north) -- ++(0,0.4) -| node[pos=0.25, above, lab]{step the environment} (env.north);
+
+  \node[box, fill=cFsqF!10, text width=4.9cm, anchor=north] (c1) at (1.25,0.95)
+    {\textbf{frame corpus} (autoencoders)\\$s_t$ only, uint8 $(N,84,84,4)$\\50\,k stacks/game, seed 42\\train 11${\times}$50\,k = 550\,k $\mid$ test 4${\times}$50\,k};
+  \node[box, fill=cNat!10, text width=4.9cm, anchor=north] (c2) at (7.3,0.95)
+    {\textbf{transition corpus} (V-JEPA)\\$(s_t,a_t,s_{t+1},d_t)$; at $d_t{=}1$ the true\\terminal frame, not the reset\\train 11${\times}$250\,k (5 shards)\\val 11${\times}$10\,k, test 4${\times}$50\,k; all seed 42};
+  \coordinate (split) at ([yshift=-0.22cm]pol.south |- env.south);
+  \draw[line width=0.6pt, draw=black!70] (pol.south) -- (split);
+  \draw[arr] (split) -| (c1.north);
+  \draw[arr] (split) -| (c2.north);
+
+  % =========================================================== (b) processing
+  \node[ttl] at (-1.35,-1.15) {(b) Processing at training time};
+
+  % --- b1 frame overlap
+  \begin{scope}[shift={(0,-0.95)}]
+  \node[lab, anchor=west] at (-1.1,-0.85) {\textbf{frame-stack overlap}};
+  \foreach \i/\t in {0/$f_{t-3}$,1/$f_{t-2}$,2/$f_{t-1}$,3/$f_{t}$,4/$f_{t+1}$}
+    {\node[fr, fill=gray!10] (f\i) at (-0.6+\i*0.88,-1.7) {\t};}
+  \draw[cNat, line width=1pt] ([yshift=0.12cm]f0.north west) -- ([yshift=0.12cm]f3.north east)
+     node[midway, above, font=\scriptsize, text=cNat] {$s_t$};
+  \draw[cFsqF, line width=1pt] ([yshift=-0.12cm]f1.south west) -- ([yshift=-0.12cm]f4.south east)
+     node[midway, below, font=\scriptsize, text=cFsqF] {$s_{t+1}$};
+  \node[lab, align=left, anchor=north west] at (-1.1,-2.55) {3 of 4 frames shared: the one-step\\target is 75\,\% identical to the input};
+  \end{scope}
+
+  % --- b2 terminal mask
+  \begin{scope}[shift={(5.35,-0.95)}]
+  \node[lab, anchor=west] at (-0.4,-0.85) {\textbf{episode boundaries}};
+  \node[fr, fill=gray!10, minimum width=0.7cm] (e1) at (0,-1.7) {$s_{T-1}$};
+  \node[fr, fill=red!12, minimum width=0.7cm] (e2) at (1.55,-1.7) {$s_T$};
+  \node[fr, fill=gray!10, minimum width=0.7cm] (e3) at (3.1,-1.7) {$s'_0$};
+  \node[fr, fill=gray!10, minimum width=0.7cm] (e4) at (4.65,-1.7) {$s'_1$};
+  \draw[arr] (e1) -- node[above, lab]{$m{=}0$} (e2);
+  \draw[arr, densely dotted] (e2) -- node[above, lab]{reset} (e3);
+  \draw[arr] (e3) -- node[above, lab]{$m{=}1$} (e4);
+  \node[lab, align=left, anchor=north west] at (-0.4,-2.55) {$d_t{=}1\Rightarrow m_t{=}0$: no loss on the terminal\\transition, none across the reset};
+  \end{scope}
+
+  % --- b3 action canonicalisation
+  \begin{scope}[shift={(0,-3.8)}]
+  \node[lab, anchor=west] at (-1.1,-0.85) {\textbf{canonical actions}};
+  \node[box, minimum height=0.55cm, font=\scriptsize] (bk) at (-0.3,-1.55) {Breakout \#3};
+  \node[box, minimum height=0.55cm, font=\scriptsize] (sq) at (-0.3,-2.35) {Seaquest \#3};
+  \node[box, minimum height=0.55cm, font=\scriptsize, fill=cFsqJ!12] (l4) at (2.75,-1.55) {ALE-18 \#4 LEFT};
+  \node[box, minimum height=0.55cm, font=\scriptsize, fill=cFsqJ!12] (r3) at (2.75,-2.35) {ALE-18 \#3 RIGHT};
+  \draw[arr] (bk) -- (l4); \node[lab] at (1.05,-1.95) {LUT}; \draw[arr] (sq) -- (r3);
+  \node[lab, align=left, anchor=north west] at (-1.1,-2.8) {same index, different command:\\mapped before the shared action embedding};
+  \end{scope}
+
+  % --- b4 motion mask
+  \begin{scope}[shift={(5.35,-3.8)}]
+  \node[lab, anchor=west] at (-0.4,-0.85) {\textbf{motion mask} (FSQ loss)};
+  \node[box, minimum height=0.55cm, text width=4.9cm, anchor=west] (mm) at (-0.4,-1.85)
+    {\mbox{$m=\mathbf{1}\big[\max_j|x^{(j+1)}{-}x^{(j)}|>0.05\big]$}\\per pixel, from the stack itself};
+  \node[lab, align=left, anchor=north west] at (-0.4,-2.8) {moving pixels get 85\,\% of the loss regardless\\of how few there are, static background 15\,\%};
+  \end{scope}
+\end{tikzpicture}}

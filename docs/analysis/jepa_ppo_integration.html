@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How train_sb3.py plugs in the JEPA model</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#14181f; --muted:#5b6675; --line:#e2e6ec;
+    --accent:#2563eb; --accent-soft:#eaf0fe;
+    --keep:#0f8a5f; --keep-soft:#e6f6ef;
+    --drop:#8b95a3; --drop-soft:#eef0f3;
+    --warn:#b45309; --warn-soft:#fdf2e2;
+    --code:#171b23; --code-ink:#dfe4ec;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px;}
+  header{border-bottom:3px solid var(--ink);padding-bottom:20px;margin-bottom:28px;}
+  h1{font-size:27px;margin:0 0 8px;letter-spacing:-.02em;line-height:1.25;}
+  .sub{color:var(--muted);font-size:15px;margin:0;}
+  h2{font-size:19px;margin:44px 0 6px;letter-spacing:-.01em;}
+  h2 .num{display:inline-block;min-width:26px;color:var(--accent);font-variant-numeric:tabular-nums;}
+  h3{font-size:15px;margin:24px 0 8px;color:var(--muted);text-transform:uppercase;
+     letter-spacing:.07em;font-weight:650;}
+  p{margin:10px 0;}
+  code{font-family:var(--mono);font-size:.9em;background:#eceff3;padding:1px 5px;border-radius:4px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:16px 0;}
+  .tldr{background:var(--accent-soft);border:1px solid #c9d9fb;border-radius:10px;padding:16px 20px;margin:20px 0;}
+  .tldr strong{color:var(--accent);}
+  pre.flow{background:var(--code);color:var(--code-ink);border-radius:10px;padding:18px;
+    overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.55;margin:14px 0;}
+  pre.flow .c{color:#7f8b9e;}          /* comment  */
+  pre.flow .k{color:#7fd6a2;}          /* kept     */
+  pre.flow .d{color:#8b95a3;}          /* dropped  */
+  pre.flow .a{color:#82b1ff;}          /* accent   */
+  pre.flow .w{color:#f0b866;}          /* warn     */
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:650;}
+  td.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .pill{display:inline-block;font-size:11px;font-weight:650;padding:2px 8px;border-radius:20px;
+        letter-spacing:.04em;text-transform:uppercase;}
+  .pill.keep{background:var(--keep-soft);color:var(--keep);}
+  .pill.drop{background:var(--drop-soft);color:var(--drop);}
+  .note{border-left:3px solid var(--warn);background:var(--warn-soft);padding:12px 16px;
+        border-radius:0 8px 8px 0;margin:16px 0;font-size:14px;}
+  .note b{color:var(--warn);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:720px){.grid2{grid-template-columns:1fr;}}
+  .slots{display:flex;flex-wrap:wrap;gap:5px;margin:12px 0;}
+  .slot{font-family:var(--mono);font-size:11.5px;padding:5px 8px;border-radius:6px;
+        border:1px solid var(--line);background:#fff;color:var(--muted);}
+  .slot b{display:block;color:var(--ink);font-size:12px;}
+  .slot.train{border-color:#bfe0cf;background:var(--keep-soft);}
+  .slot.train b{color:var(--keep);}
+  .slot.unk{border-color:#f2cf98;background:var(--warn-soft);}
+  .slot.unk b{color:var(--warn);}
+  .file{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:600;}
+  .lead{font-size:16px;color:var(--muted);}
+  ul{margin:10px 0;padding-left:20px;} li{margin:6px 0;}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin:10px 0;}
+  .kv dt{font-family:var(--mono);color:var(--muted);white-space:nowrap;}
+  .kv dd{margin:0;}
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
+         color:var(--muted);font-size:13px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>How <span style="font-family:var(--mono);font-size:.85em">train_sb3.py</span> plugs in the JEPA model</h1>
+  <p class="sub">PPO / universal &nbsp;·&nbsp; every number on this page was read off a real build, not estimated</p>
+</header>
+
+<div class="tldr">
+  <strong>The one idea.</strong> The training script never builds, loads, or calls the JEPA model.
+  It hands stable-baselines3 a <em>recipe</em> &mdash; a class and some arguments &mdash; and
+  stable-baselines3 constructs the encoder itself, at the moment it builds the policy.
+  That indirection is why one script runs the CNN baseline and the world model with no
+  <code>if</code> statement anywhere in the training loop.
+</div>
+
+<h2><span class="num">1</span> Where this sits in the project</h2>
+<p>Three stages, loosely coupled. This page is about the arrow between stage 2 and stage 3.</p>
+
+<pre class="flow">
+  STAGE 1                    STAGE 2                        STAGE 3
+  collect frames    ──▶      train world model      ──▶     train PPO on top
+  <span class="c">atari-DQN-v2/</span>             <span class="c">atari-DQN-v2/</span>                  <span class="c">PPO/universal/</span>
+  <span class="c">custom_datasets/</span>          <span class="c">jepa_train.py</span>                  <span class="c">train_sb3.py</span>
+                             <span class="c">      │</span>                          <span class="c">      ▲</span>
+                             <span class="c">      ▼</span>                          <span class="c">      │</span>
+                        <span class="a">vjepa_v2_best.pt</span>  ────────────────────┘
+                        <span class="c">12.5M params, the handoff artifact</span>
+</pre>
+
+<p>The checkpoint file is the entire interface between the two halves of the project.
+Stage 3 knows nothing about how the world model was trained. It only needs the file.</p>
+
+
+<h2><span class="num">2</span> The plug-in mechanism</h2>
+<p>Stable-baselines3 lets you replace the vision network inside its policy. You pass a
+dictionary called <code>policy_kwargs</code>. Two keys matter:</p>
+
+<dl class="kv">
+  <dt>features_extractor_class</dt>
+  <dd>a class, <b>not an instance</b>. Stable-baselines3 will call it for you.</dd>
+  <dt>features_extractor_kwargs</dt>
+  <dd>the arguments to pass when it does. Everything except <code>observation_space</code>,
+      which stable-baselines3 supplies on its own.</dd>
+</dl>
+
+<p>So the whole integration is: build that dictionary correctly, then get out of the way.
+<span class="file">build_policy_kwargs()</span> at the bottom of <span class="file">factory.py</span> is the only
+function that does it.</p>
+
+<pre class="flow">
+  <span class="c">configs/jepa.yaml</span>
+    arch: jepa
+    checkpoint: ../../atari-DQN-v2/checkpoints/main/vjepa_v2_best.pt
+    freeze: true
+    env_mode: "true"
+          <span class="c">│</span>
+          <span class="c">│  read by parse_args()</span>
+          <span class="c">▼</span>
+  <span class="a">train_sb3.py:185</span>   build_policy_kwargs(arch="jepa", checkpoint=…, game="Pong", …)
+          <span class="c">│</span>
+          <span class="c">│  returns a PLAIN DICT. no model exists yet.</span>
+          <span class="c">▼</span>
+    {
+      net_arch:                  [512],
+      features_extractor_class:  <span class="k">JepaExtractor</span>,        <span class="c">◀── the class object</span>
+      features_extractor_kwargs: {checkpoint, game, env_mode, freeze}
+    }
+          <span class="c">│</span>
+          <span class="c">▼</span>
+  <span class="a">train_sb3.py:184</span>   PPO("CnnPolicy", env, policy_kwargs=<span class="c">&lt;that dict&gt;</span>)
+          <span class="c">│</span>
+          <span class="c">│  SB3 builds the policy, and while doing so calls:</span>
+          <span class="c">│    JepaExtractor(observation_space, checkpoint=…, game=…, …)</span>
+          <span class="c">▼</span>
+  <span class="a">factory.py:128</span>    class JepaExtractor(_FreezableExtractor)
+                    <span class="c">◀── the checkpoint is finally opened HERE</span>
+</pre>
+
+<div class="note">
+  <b>Why "CnnPolicy" is still correct.</b> It looks wrong to ask for a CNN policy and then
+  hand over a Vision Transformer. But <code>"CnnPolicy"</code> only tells stable-baselines3
+  that observations are images. Its default vision network is NatureCNN, and
+  <code>features_extractor_class</code> overrides that default. The string is about the
+  observation type, not the architecture.
+</div>
+
+
+<h2><span class="num">3</span> What actually gets loaded</h2>
+<p>The checkpoint holds the whole world model, including parts that only exist to make
+training work. The extractor keeps two of the five pieces.</p>
+
+<table>
+  <thead><tr><th>Piece in the checkpoint</th><th>Params</th><th></th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>context_encoder</code></td><td class="num">4,949,248</td>
+        <td><span class="pill keep">kept</span></td>
+        <td>This is the representation. Frames go in, features come out.</td></tr>
+    <tr><td><code>env_embed</code></td><td class="num">4,096</td>
+        <td><span class="pill keep">kept</span></td>
+        <td>16 &times; 256 lookup table. Tells the encoder which game it is looking at.</td></tr>
+    <tr><td><code>target_encoder</code></td><td class="num">4,949,248</td>
+        <td><span class="pill drop">dropped</span></td>
+        <td>A slow-moving copy of the context encoder. It exists to stop the world model
+            from collapsing during pretraining. Useless once pretraining is over.</td></tr>
+    <tr><td><code>predictor</code></td><td class="num">2,374,400</td>
+        <td><span class="pill drop">dropped</span></td>
+        <td>Predicts the next latent state given an action. That is the world-modelling
+            task itself. PPO learns its own policy, so it is not needed.</td></tr>
+    <tr><td><code>inverse_head</code></td><td class="num">201,490</td>
+        <td><span class="pill drop">dropped</span></td>
+        <td>Auxiliary inverse-dynamics head, a pretraining-only signal.</td></tr>
+  </tbody>
+</table>
+
+<p>Out of 12,478,482 saved parameters, <b>4,953,344 are carried into the RL run</b> and the
+rest are discarded at load time. Discarding happens by simply not keeping a reference:
+<span class="file">factory.py:146-147</span> pulls out two attributes and lets Python garbage-collect
+the rest of the model object.</p>
+
+<pre class="flow">
+  ckpt = torch.load(checkpoint)
+  cfg  = ckpt["model_config"]              <span class="c">◀── architecture is read FROM the file,</span>
+                                           <span class="c">    not hardcoded. weights and shape</span>
+  model = PaperAccurateJEPA(**cfg)         <span class="c">    can never drift apart.</span>
+  model.load_state_dict(strip_compile_prefix(ckpt["model_state_dict"]))
+
+  self.encoder   = model.<span class="k">context_encoder</span>    <span class="c">◀── keep</span>
+  self.env_embed = model.<span class="k">env_embed</span>          <span class="c">◀── keep</span>
+                         <span class="d">target_encoder</span>     <span class="c">◀── no reference taken, freed</span>
+                         <span class="d">predictor</span>
+                         <span class="d">inverse_head</span>
+</pre>
+
+<div class="note">
+  <b>The <code>_orig_mod.</code> problem.</b> The world model was trained under
+  <code>torch.compile</code>, which silently renames every parameter with an
+  <code>_orig_mod.</code> prefix. Loading such a state dict into an uncompiled model
+  matches nothing and, with <code>strict=False</code>, fails <em>silently</em> into a
+  randomly initialised encoder. <code>strip_compile_prefix</code> removes the prefix.
+  This is the single most dangerous failure mode in the whole pipeline, because the run
+  still trains and still produces a curve.
+</div>
+
+
+<h2><span class="num">4</span> One batch of frames, end to end</h2>
+
+<pre class="flow">
+  Atari env  ─▶  <span class="a">[B, 4, 84, 84]</span>  uint8, 4 stacked greyscale frames
+                        <span class="c">│</span>
+                        <span class="c">│  SB3 divides by 255 automatically, BEFORE the</span>
+                        <span class="c">│  extractor is called (normalize_images=True)</span>
+                        <span class="c">▼</span>
+                 <span class="a">[B, 4, 84, 84]</span>  float32 in [0, 1]
+                        <span class="c">│</span>
+   game "Pong" ─▶ slot 5 ─▶ env_embed ─▶ <span class="a">[B, 256]</span>
+                        <span class="c">│</span>                    <span class="c">│</span>
+                        <span class="c">▼</span>                    <span class="c">▼</span>
+              ┌──────────────────────────────────┐
+              │   context_encoder(obs, e)        │
+              │                                  │
+              │   patchify 84×84 → 6×6 grid      │
+              │   of 14×14 patches = 36 tokens   │
+              │   prepend the env vector  → 37   │
+              │   6 transformer blocks           │
+              │   drop the env token      → 36   │
+              └──────────────────────────────────┘
+                        <span class="c">│</span>
+                        <span class="c">▼</span>
+                 <span class="a">[B, 36, 256]</span>
+                        <span class="c">│  .flatten(1)</span>
+                        <span class="c">▼</span>
+                 <span class="a">[B, 9216]</span>   ◀── this is features_dim, all SB3 ever sees
+                        <span class="c">│</span>
+          ┌─────────────┴─────────────┐
+          <span class="c">▼</span>                           <span class="c">▼</span>
+    policy trunk 512             value trunk 512
+          <span class="c">▼</span>                           <span class="c">▼</span>
+    6 actions (Pong)                1 value
+</pre>
+
+<p>The number <b>36</b> is fixed by geometry: 84 divided by a patch size of 14 gives a
+6&times;6 grid. The number <b>9216</b> is <code>36 &times; 256</code> and is computed at
+<span class="file">factory.py:142</span> rather than hardcoded, so a checkpoint with a different
+embedding width still works.</p>
+
+<div class="note">
+  <b>The frames are normalised exactly once.</b> Stable-baselines3 divides by 255 before the
+  extractor runs. The JEPA encoder also calls a <code>to_float</code> helper, but that helper
+  passes floats through untouched and only rescales <code>uint8</code>. Both halves were
+  written to normalise, and it still works, because one of them checks first.
+</div>
+
+
+<h2><span class="num">5</span> Telling the encoder which game it is looking at</h2>
+<p>This is the part that has no equivalent in the CNN baseline. The encoder takes a second
+input besides pixels: a 256-dimensional vector identifying the game. There are 16 slots.</p>
+
+<div class="slots">
+  <span class="slot train"><b>0</b>BeamRider</span>
+  <span class="slot train"><b>1</b>Breakout</span>
+  <span class="slot train"><b>2</b>DemonAttack</span>
+  <span class="slot train"><b>3</b>Enduro</span>
+  <span class="slot train"><b>4</b>MsPacman</span>
+  <span class="slot train"><b>5</b>Pong</span>
+  <span class="slot train"><b>6</b>Qbert</span>
+  <span class="slot train"><b>7</b>Riverraid</span>
+  <span class="slot train"><b>8</b>RoadRunner</span>
+  <span class="slot train"><b>9</b>Seaquest</span>
+  <span class="slot train"><b>10</b>SpaceInvaders</span>
+  <span class="slot unk"><b>11</b>UNKNOWN</span>
+  <span class="slot"><b>12</b>Alien</span>
+  <span class="slot"><b>13</b>Asteroids</span>
+  <span class="slot"><b>14</b>Atlantis</span>
+  <span class="slot"><b>15</b>IceHockey</span>
+</div>
+<p style="font-size:13px;color:var(--muted);margin-top:-2px">
+  Green: trained on. Amber: the generic slot. Grey: reserved for held-out games, allocated
+  but never given a gradient during pretraining.
+</p>
+
+<p>Which slot gets used is decided by one line, <span class="file">factory.py:149</span>:</p>
+
+<pre class="flow">
+  slot = <span class="w">gamelib.UNKNOWN_ID</span> if env_mode == "unknown" else <span class="k">gamelib.GAME_TO_ID[game]</span>
+  self.register_buffer("env_slot", torch.tensor(slot))
+</pre>
+
+<p>Two things worth pointing out to a reviewer:</p>
+<ul>
+  <li><b>It is a buffer, not a plain tensor.</b> Registering it means
+      <code>.to("cuda")</code> moves it along with the weights. A plain attribute would stay
+      on the CPU and crash on the first forward pass.</li>
+  <li><b><code>--env-mode unknown</code> is the zero-shot experiment.</b> Point it at a game
+      the world model never saw, and slot 11 supplies a generic "some Atari game" vector
+      instead of a game-specific one. The encoder runs unchanged. Without this slot there
+      would be no defined input for an unseen game at all.</li>
+</ul>
+
+<div class="note">
+  <b>A YAML trap that is already handled.</b> In <code>configs/jepa.yaml</code> the value is
+  written <code>env_mode: "true"</code> with quotes. Unquoted, YAML parses <code>true</code>
+  as a boolean, the string comparison <code>env_mode == "unknown"</code> still works, but the
+  argparse <code>choices</code> check rejects it and the run dies at startup.
+</div>
+
+
+<h2><span class="num">6</span> What "frozen" really means</h2>
+<p>Freezing the encoder takes two separate mechanisms, and the obvious one alone is not enough.</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3 style="margin-top:0">Part 1 &mdash; no gradients</h3>
+    <p style="margin:0"><code>requires_grad = False</code> on every parameter. The optimiser
+    cannot update the encoder. This part is obvious and most people stop here.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Part 2 &mdash; pinned to eval mode</h3>
+    <p style="margin:0">Stable-baselines3 calls <code>policy.set_training_mode(True)</code>
+    before <em>every</em> update, which propagates into the extractor. So
+    <code>train()</code> is overridden to ignore it while frozen.</p>
+  </div>
+</div>
+
+<pre class="flow">
+  <span class="c">factory.py:99</span>
+  def train(self, mode=True):
+      return super().train(<span class="k">False if self.frozen else mode</span>)
+                            <span class="c">▲</span>
+                            <span class="c">└─ SB3 asks for train mode every update; we say no</span>
+</pre>
+
+<p>Without part 2, two things would drift even with zero gradients:</p>
+<ul>
+  <li><b>Dropout</b> switches back on inside the transformer, so the "frozen" features become
+      stochastic and differ between the rollout and the update that follows it.</li>
+  <li><b>The EMA codebook</b> in the VQ-VAE arms rewrites itself from whatever batch it sees
+      whenever it is in train mode. No gradient is involved. The representation would quietly
+      change under the RL objective, which destroys the experiment's premise.</li>
+</ul>
+
+<h3>The check that proves it worked</h3>
+<p><span class="file">train_sb3.py:196</span> prints the trainable parameter count at startup.
+These are the real numbers for Pong:</p>
+
+<table>
+  <thead><tr><th>Run</th><th>Trainable</th><th>Total</th><th>What is learning</th></tr></thead>
+  <tbody>
+    <tr><td><code>--frozen</code></td><td class="num">9,441,799</td><td class="num">14,395,143</td>
+        <td>policy and value trunks only</td></tr>
+    <tr><td><code>--joint</code></td><td class="num">14,395,143</td><td class="num">14,395,143</td>
+        <td>everything, encoder included</td></tr>
+  </tbody>
+</table>
+<p>The gap is exactly 4,953,344, which is the encoder plus the embedding table from the
+table in section 3. If those two numbers are equal in a frozen run, the freeze silently
+failed.</p>
+
+<div class="note">
+  <b>Worth knowing:</b> the trainable count is large even when frozen, because the features
+  are 9216-wide and stable-baselines3 builds a <em>separate</em> 512-unit trunk for the policy
+  and for the value function. That is 2 &times; 9216 &times; 512 weights in the heads alone.
+</div>
+
+
+<h2><span class="num">7</span> The same script, without JEPA</h2>
+<p>The baseline takes the short path through the exact same code. This is what makes the
+comparison clean.</p>
+
+<pre class="flow">
+  arch = "nature"                          arch = "jepa"
+      <span class="c">│</span>                                       <span class="c">│</span>
+      <span class="c">▼</span>                                       <span class="c">▼</span>
+  {net_arch: [512]}                    {net_arch: [512],
+      <span class="c">│</span>                                     features_extractor_class:  JepaExtractor,
+      <span class="c">│</span>                                     features_extractor_kwargs: {…}}
+      <span class="c">│</span>                                       <span class="c">│</span>
+      <span class="c">▼</span>                                       <span class="c">▼</span>
+  SB3 uses its own NatureCNN           SB3 uses our extractor
+  512 features, random init            9216 features, pretrained
+  trains from scratch                  frozen or finetuned
+      <span class="c">└──────────────┬────────────────────────┘</span>
+                     <span class="c">▼</span>
+        identical PPO, identical hyperparameters,
+        identical [512] head, identical env splits
+</pre>
+
+<p>Setting <code>net_arch</code> explicitly matters more than it looks. Left alone,
+stable-baselines3 defaults to an empty head for its own NatureCNN and a
+<code>[64, 64]</code> head for a custom extractor. The two arms would then differ in head
+capacity as well as in representation, and any result would be uninterpretable.</p>
+
+
+<h2><span class="num">8</span> Three environment splits</h2>
+<p>Not part of the JEPA plumbing, but a reviewer will ask, and it is the reason the reported
+numbers are trustworthy.</p>
+
+<table>
+  <thead><tr><th>Split</th><th>Seed</th><th>Rewards</th><th>Used for</th></tr></thead>
+  <tbody>
+    <tr><td>train</td><td class="num">seed</td><td>clipped, ends on life loss</td>
+        <td>the PPO updates</td></tr>
+    <tr><td>validation</td><td class="num">seed + 10,000</td><td>raw, full episode</td>
+        <td>selecting <code>best_model.zip</code></td></tr>
+    <tr><td>test</td><td class="num">seed + 20,000</td><td>raw, full episode</td>
+        <td>the final reported score, once</td></tr>
+  </tbody>
+</table>
+
+<p>Training uses clipped rewards because PPO needs a bounded signal. Validation and test
+disable clipping and life-loss termination, so their numbers are true game scores that can
+be compared against published Atari results. The test split never influences training or
+model selection, which is what makes the final number honest.</p>
+<p>Both the final and the best checkpoint are evaluated and both are written to
+<code>test_results.json</code>. Reporting only the best would be quietly selecting on
+validation noise.</p>
+
+
+<h2><span class="num">9</span> Questions a reviewer is likely to ask</h2>
+
+<div class="card">
+  <p style="margin-top:0"><b>Is the encoder genuinely frozen, or just not receiving gradients?</b><br>
+  Genuinely frozen. Gradients are off and eval mode is pinned, so dropout and any EMA state
+  cannot move either. The startup parameter count is the evidence.</p>
+
+  <p><b>Are the pixels normalised twice?</b><br>
+  No. Stable-baselines3 divides by 255, and the encoder's converter only touches
+  <code>uint8</code> tensors, so it is a no-op on the already-scaled input.</p>
+
+  <p><b>How do you know the pretrained weights actually loaded?</b><br>
+  The compile-prefix strip runs before loading, and any missing or unexpected keys are
+  printed. A silent fallback to random weights is the failure this guards against.</p>
+
+  <p><b>Why is a Vision Transformer being loaded by something called CnnPolicy?</b><br>
+  That string selects the image-observation policy, not the architecture. The architecture
+  comes from <code>features_extractor_class</code>.</p>
+
+  <p style="margin-bottom:0"><b>Is the comparison against the baseline fair?</b><br>
+  Same PPO implementation, same hyperparameters from the same YAML structure, same
+  <code>[512]</code> head, same three env splits, same seeds. The extractor is the only
+  thing that differs.</p>
+</div>
+
+<footer>
+  Files referenced: <span class="file">PPO/universal/train_sb3.py</span>,
+  <span class="file">PPO/universal/factory.py</span>,
+  <span class="file">PPO/universal/configs/jepa.yaml</span>,
+  <span class="file">atari-DQN-v2/JEPA.py</span>,
+  <span class="file">atari-DQN-v2/games.py</span>.
+  Parameter counts read from <span class="file">checkpoints/main/vjepa_v2_best.pt</span> and
+  from a constructed PPO policy on PongNoFrameskip-v4.
+</footer>
+
+</div>
+</body>
+</html>

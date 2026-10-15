@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>factory.py and the stable-baselines3 contract</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#14181f; --muted:#5b6675; --line:#e2e6ec;
+    --accent:#2563eb; --accent-soft:#eaf0fe;
+    --keep:#0f8a5f; --keep-soft:#e6f6ef;
+    --drop:#8b95a3; --drop-soft:#eef0f3;
+    --warn:#b45309; --warn-soft:#fdf2e2;
+    --bad:#c0392b; --bad-soft:#fdecea;
+    --code:#171b23; --code-ink:#dfe4ec;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px;}
+  header{border-bottom:3px solid var(--ink);padding-bottom:20px;margin-bottom:12px;}
+  h1{font-size:27px;margin:0 0 8px;letter-spacing:-.02em;line-height:1.25;}
+  .sub{color:var(--muted);font-size:15px;margin:0;}
+  h2{font-size:19px;margin:44px 0 6px;letter-spacing:-.01em;}
+  h2 .num{display:inline-block;min-width:26px;color:var(--accent);font-variant-numeric:tabular-nums;}
+  h3{font-size:15px;margin:24px 0 8px;color:var(--muted);text-transform:uppercase;
+     letter-spacing:.07em;font-weight:650;}
+  p{margin:10px 0;}
+  code{font-family:var(--mono);font-size:.9em;background:#eceff3;padding:1px 5px;border-radius:4px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:16px 0;}
+  .tldr{background:var(--accent-soft);border:1px solid #c9d9fb;border-radius:10px;padding:16px 20px;margin:20px 0;}
+  .tldr strong{color:var(--accent);}
+  .alert{background:var(--bad-soft);border:2px solid var(--bad);border-radius:10px;padding:18px 20px;margin:22px 0;}
+  .alert h3{color:var(--bad);margin:0 0 8px;font-size:13px;}
+  .alert p{margin:8px 0;}
+  pre.flow{background:var(--code);color:var(--code-ink);border-radius:10px;padding:18px;
+    overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.55;margin:14px 0;}
+  pre.flow .c{color:#7f8b9e;} pre.flow .k{color:#7fd6a2;} pre.flow .d{color:#8b95a3;}
+  pre.flow .a{color:#82b1ff;} pre.flow .w{color:#f0b866;} pre.flow .x{color:#ff8a80;font-weight:700;}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:650;}
+  td.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.5px;}
+  .pill{display:inline-block;font-size:11px;font-weight:650;padding:2px 8px;border-radius:20px;
+        letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;}
+  .pill.keep{background:var(--keep-soft);color:var(--keep);}
+  .pill.drop{background:var(--drop-soft);color:var(--drop);}
+  .pill.bad{background:var(--bad-soft);color:var(--bad);}
+  .note{border-left:3px solid var(--warn);background:var(--warn-soft);padding:12px 16px;
+        border-radius:0 8px 8px 0;margin:16px 0;font-size:14px;}
+  .note b{color:var(--warn);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:720px){.grid2{grid-template-columns:1fr;}}
+  .file{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:600;}
+  ul{margin:10px 0;padding-left:20px;} li{margin:6px 0;}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin:10px 0;}
+  .kv dt{font-family:var(--mono);color:var(--muted);white-space:nowrap;}
+  .kv dd{margin:0;}
+  .bar{display:flex;height:26px;border-radius:6px;overflow:hidden;margin:12px 0 4px;
+       font-size:11.5px;font-weight:650;color:#fff;font-family:var(--mono);}
+  .bar span{display:flex;align-items:center;justify-content:center;}
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
+         color:var(--muted);font-size:13px;}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 20px;margin:0 0 8px;
+       font-size:14px;columns:2;column-gap:28px;}
+  @media(max-width:720px){.toc{columns:1;}}
+  .toc a{color:var(--ink);text-decoration:none;display:block;padding:3px 0;break-inside:avoid;}
+  .toc a:hover{color:var(--accent);}
+  .toc a b{color:var(--accent);display:inline-block;min-width:20px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1><span style="font-family:var(--mono);font-size:.85em">factory.py</span> and the stable-baselines3 contract</h1>
+  <p class="sub">PPO / universal &nbsp;·&nbsp; stable-baselines3 2.8.0 &nbsp;·&nbsp; every claim below traced to the installed SB3 source</p>
+</header>
+
+<nav class="toc">
+  <a href="#s1"><b>1</b> What the file is for</a>
+  <a href="#s2"><b>2</b> The contract SB3 imposes</a>
+  <a href="#s3"><b>3</b> The registry pattern</a>
+  <a href="#s4"><b>4</b> The class hierarchy</a>
+  <a href="#s5"><b>5</b> JepaExtractor, line by line</a>
+  <a href="#s6"><b>6</b> Construction timeline inside SB3</a>
+  <a href="#s7"><b>7</b> A bug this timeline exposes</a>
+  <a href="#s8"><b>8</b> Freezing, both halves</a>
+  <a href="#s9"><b>9</b> build_policy_kwargs</a>
+  <a href="#s10"><b>10</b> Reference</a>
+</nav>
+
+<div class="tldr">
+  <strong>What this file does.</strong> <span class="file">factory.py</span> is an adapter.
+  Six unrelated encoder architectures, each with its own constructor signature and its own way
+  of producing a latent, are made to look identical to stable-baselines3. It exports exactly one
+  function to the outside world, <code>build_policy_kwargs()</code>, and the training script
+  calls nothing else.
+</div>
+
+
+<h2 id="s1"><span class="num">1</span> What the file is for</h2>
+<p>Every architecture in the study has a different interface. A VAE exposes
+<code>fc_mu</code>. A VQ-VAE returns a tuple from its quantiser. The JEPA encoder wants a
+second argument that no other model takes. Left unmanaged, the PPO script would need a branch
+per architecture in the middle of the training loop.</p>
+
+<pre class="flow">
+   <span class="d">6 different encoder interfaces</span>                 <span class="k">1 uniform interface</span>
+   ────────────────────────────                     ───────────────────
+   StandardVAE      .fc_mu(...)          ┐
+   EmaVqVae         .quantizer(...)      │
+   AtariResidualVQVAE                    │   <span class="a">factory.py</span>      forward(obs) -> [B, D]
+   AtariFSQVAE      .fsq(.pre_quant...)  ├──▶  adapter   ──▶  .features_dim
+   AdvancedViTVQVAE                      │                    nn.Module
+   PaperAccurateJEPA(obs, <span class="w">env_vector</span>)     ┘
+</pre>
+
+<p>The training script therefore contains no architecture-specific code at all. Swapping the
+representation is a change to one YAML field.</p>
+
+
+<h2 id="s2"><span class="num">2</span> The contract stable-baselines3 imposes</h2>
+<p>To plug a network into SB3 you subclass <code>BaseFeaturesExtractor</code>. The base class
+is remarkably small. This is the whole thing:</p>
+
+<pre class="flow">
+  <span class="c">stable_baselines3/common/torch_layers.py</span>
+  class BaseFeaturesExtractor(nn.Module):
+      def __init__(self, observation_space, features_dim=0):
+          super().__init__()
+          <span class="w">assert features_dim &gt; 0</span>
+          self._observation_space = observation_space
+          self._features_dim      = features_dim
+
+      @property
+      def features_dim(self): return self._features_dim
+</pre>
+
+<p>So the contract has three obligations, and that is all:</p>
+<dl class="kv">
+  <dt>1. accept</dt><dd><code>observation_space</code> as the first constructor argument.
+      SB3 supplies it; you never pass it yourself.</dd>
+  <dt>2. declare</dt><dd>the output width, by calling <code>super().__init__(space, dim)</code>.
+      It must be known <em>before</em> the first forward pass, because SB3 sizes the policy and
+      value heads from it.</dd>
+  <dt>3. implement</dt><dd><code>forward(obs) -&gt; [B, features_dim]</code>. A flat 2-D tensor.</dd>
+</dl>
+
+<p>The awkward one is obligation 2. SB3 needs the width at construction time, but for most of
+these encoders the width is a consequence of the architecture rather than something written
+down anywhere. The two extractor classes solve this differently, which is the single most
+interesting design detail in the file.</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3 style="margin-top:0">PretrainedExtractor &mdash; measure it</h3>
+    <p style="margin:0">Runs one dummy batch of zeros through the encoder and reads the output
+    shape. Works for any architecture without knowing anything about it.</p>
+    <pre class="flow" style="margin:10px 0 0;font-size:11.5px">dim = encode(backbone,
+        torch.zeros(1, *obs_space.shape)).shape[1]</pre>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">JepaExtractor &mdash; compute it</h3>
+    <p style="margin:0">Reads the embedding width out of the checkpoint's saved config and
+    multiplies by the token count. No forward pass needed.</p>
+    <pre class="flow" style="margin:10px 0 0;font-size:11.5px">36 * cfg["embed_dim"]
+<span class="c">   = 36 * 256 = 9216</span></pre>
+  </div>
+</div>
+
+<div class="note">
+  <b>Why the probe runs under <code>eval()</code>.</b> A shape probe should have no side
+  effects, but for one architecture it does. <code>EmaVqVae</code>'s quantiser revives unused
+  codebook entries from whatever batch it sees while in training mode. Probing it with a single
+  frame of zeros would corrupt the codebook before training even starts. Hence
+  <code>backbone.eval()</code> on the line before the probe.
+</div>
+
+
+<h2 id="s3"><span class="num">3</span> The registry pattern</h2>
+<p>Five of the six architectures differ only in two ways: how to construct them, and how to
+get a latent out. Those two things are captured as a pair of callables in one dictionary.</p>
+
+<pre class="flow">
+  ARCHS = {
+      <span class="c">name</span>          <span class="c">(  builder closure                    ,  encode function )</span>
+      "vae":       (_builder("models.standard_vae","StandardVAE"), <span class="k">_encode_vae</span>),
+      "ema_vqvae": (_builder(… num_embeddings=512, embedding_dim=64), <span class="k">_encode_vq</span>),
+      "vqvae":     (_builder(… num_embeddings=512, embedding_dim=64), <span class="k">_encode_vq</span>),
+      "fsq":       (_builder(… hidden_dim=128, fsq_levels=[8,5,5,3]), <span class="k">_encode_fsq</span>),
+      "vit_vqvae": (_builder(… num_embeddings=512, embed_dim=256),    <span class="k">_encode_vit_vq</span>),
+  }
+</pre>
+
+<p><code>_builder</code> returns a closure rather than a model. Nothing is imported or
+constructed until that closure is called, so a run of the FSQ arm never imports the ViT module.
+That matters here because one of those modules is currently broken, and an eager import would
+take down every arm with it.</p>
+
+<p>The encode functions are two lines each and exist because the bottleneck differs:</p>
+
+<table>
+  <thead><tr><th class="mono">encode fn</th><th>What it does</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">_encode_vae</td><td>takes the posterior mean, never a sample</td><td>StandardVAE</td></tr>
+    <tr><td class="mono">_encode_vq</td><td>encoder then quantiser, discards the second return value</td><td>EmaVqVae, AtariResidualVQVAE</td></tr>
+    <tr><td class="mono">_encode_fsq</td><td>encoder, projection, then finite scalar quantiser</td><td>AtariFSQVAE</td></tr>
+    <tr><td class="mono">_encode_vit_vq</td><td>ViT encoder, 1&times;1 compression, then quantiser</td><td>AdvancedViTVQVAE</td></tr>
+  </tbody>
+</table>
+
+<p>Taking the mean rather than a sample from the VAE is a deliberate choice worth defending.
+A stochastic extractor would make the features differ between the rollout and the update
+computed from that rollout, which silently violates an assumption PPO's importance ratio
+depends on.</p>
+
+<p>Adding a seventh architecture is one dictionary entry plus, at most, a two-line encode
+function. The JEPA model is the one architecture that cannot fit this table, because it needs
+a second input, so it gets its own class instead.</p>
+
+
+<h2 id="s4"><span class="num">4</span> The class hierarchy</h2>
+
+<pre class="flow">
+                 nn.Module
+                     <span class="c">│</span>
+          BaseFeaturesExtractor          <span class="c">← SB3's contract</span>
+                     <span class="c">│</span>
+          <span class="k">_FreezableExtractor</span>              <span class="c">← ours: freeze + eval-pinning</span>
+                <span class="c">╱        ╲</span>
+   <span class="a">PretrainedExtractor</span>    <span class="a">JepaExtractor</span>
+   <span class="c">5 archs via ARCHS</span>      <span class="c">1 arch, game-conditioned</span>
+   <span class="c">probes for its dim</span>     <span class="c">computes its dim</span>
+   <span class="c">forward(obs)</span>           <span class="c">forward(obs) + env vector</span>
+</pre>
+
+<p>The middle class exists only so the freezing logic is written once. It defines no
+<code>__init__</code>, which is why both subclasses must call <code>_set_frozen()</code>
+themselves as the last step of their own constructor.</p>
+
+
+<h2 id="s5"><span class="num">5</span> JepaExtractor, line by line</h2>
+
+<pre class="flow">
+  <span class="c">135</span>  def __init__(self, observation_space, checkpoint, game, env_mode="true", freeze=True):
+  <span class="c">136</span>      sys.path.insert(0, JEPA_DIR)              <span class="c">◀ atari-DQN-v2 is not a package,</span>
+  <span class="c">137</span>      from JEPA import PaperAccurateJEPA, …     <span class="c">  so it goes on the path first.</span>
+  <span class="c">138</span>      import games as gamelib                   <span class="c">  import must come after line 136.</span>
+
+  <span class="c">140</span>      ckpt = torch.load(checkpoint, map_location=<span class="k">"cpu"</span>, weights_only=False)
+  <span class="c">141</span>      cfg  = ckpt["model_config"]               <span class="c">◀ architecture read FROM the file.</span>
+                                                  <span class="c">  weights and shape cannot drift.</span>
+  <span class="c">142</span>      super().__init__(observation_space, <span class="a">36 * cfg["embed_dim"]</span>)
+                                                  <span class="c">◀ must run before assigning any</span>
+                                                  <span class="c">  submodule: nn.Module.__init__</span>
+                                                  <span class="c">  has to have run first.</span>
+  <span class="c">144</span>      model = PaperAccurateJEPA(**cfg)
+  <span class="c">145</span>      model.load_state_dict(<span class="w">strip_compile_prefix</span>(ckpt["model_state_dict"]))
+  <span class="c">146</span>      self.encoder   = model.<span class="k">context_encoder</span>   <span class="c">◀ keep 2 of 5 components; the</span>
+  <span class="c">147</span>      self.env_embed = model.<span class="k">env_embed</span>         <span class="c">  rest is never referenced and</span>
+                                                  <span class="c">  is garbage-collected.</span>
+  <span class="c">149</span>      slot = gamelib.<span class="w">UNKNOWN_ID</span> if env_mode == "unknown" else gamelib.GAME_TO_ID[game]
+  <span class="c">150</span>      self.<span class="a">register_buffer</span>("env_slot", torch.tensor(slot))
+                                                  <span class="c">◀ buffer, not attribute, so</span>
+                                                  <span class="c">  .to("cuda") carries it along.</span>
+  <span class="c">152</span>      self._set_frozen(freeze)                  <span class="c">◀ last: must see every parameter.</span>
+
+  <span class="c">156</span>  def forward(self, obs):
+  <span class="c">157</span>      e = self.env_embed(self.env_slot.<span class="a">expand</span>(obs.shape[0]))   <span class="c">◀ scalar → [B], no copy</span>
+  <span class="c">158</span>      return self.encoder(obs, e).flatten(1)                    <span class="c">◀ [B,36,256] → [B,9216]</span>
+</pre>
+
+<p>Four ordering constraints are load-bearing in that constructor, and three of them would
+produce confusing errors rather than clean ones if violated:</p>
+<ul>
+  <li><b>Path before import.</b> Lines 136 to 138 must stay in that order.</li>
+  <li><b><code>super().__init__</code> before any <code>self.x = module</code>.</b> PyTorch
+      raises only a vague attribute error otherwise.</li>
+  <li><b><code>map_location="cpu"</code>.</b> A checkpoint saved from a GPU otherwise tries to
+      restore onto a specific device index that may not exist on the node it lands on. SB3
+      moves the finished policy to the right device afterwards.</li>
+  <li><b><code>_set_frozen</code> last.</b> It iterates <code>self.parameters()</code>, so
+      anything assigned after it would be missed and would silently stay trainable.</li>
+</ul>
+
+<div class="note">
+  <b>The most dangerous line in the file is 145.</b> The world model was trained under
+  <code>torch.compile</code>, which prefixes every parameter name with <code>_orig_mod.</code>.
+  Loading such a state dict without stripping that prefix matches nothing. With
+  <code>strict=False</code> anywhere in the path, that failure is silent, and you get a
+  randomly initialised encoder that still trains and still produces a plausible learning curve.
+  <code>PretrainedExtractor</code> takes the same precaution at line 80 and additionally prints
+  the missing and unexpected key counts.
+</div>
+
+
+<h2 id="s6"><span class="num">6</span> Construction timeline inside stable-baselines3</h2>
+<p>Understanding what SB3 does <em>after</em> your constructor returns matters, because it does
+not simply store your module and leave it alone.</p>
+
+<pre class="flow">
+  PPO("CnnPolicy", env, policy_kwargs={...})
+        <span class="c">│</span>
+        <span class="c">▼</span>
+  ActorCriticCnnPolicy.__init__
+        <span class="c">│</span>
+   <span class="a">[1]</span>  net_arch defaulting                       <span class="c">policies.py:496</span>
+        <span class="c">│</span>    if net_arch is None:
+        <span class="c">│</span>        NatureCNN        -> []
+        <span class="c">│</span>        anything else    -> dict(pi=[64,64], vf=[64,64])
+        <span class="c">│</span>    <span class="c">← this is exactly why NET_ARCH is set explicitly</span>
+        <span class="c">│</span>
+   <span class="a">[2]</span>  self.features_extractor = make_features_extractor()   <span class="c">policies.py:507</span>
+        <span class="c">│</span>        = features_extractor_class(observation_space, **kwargs)
+        <span class="c">│</span>    <span class="k">← YOUR CONSTRUCTOR RUNS HERE. checkpoint is read, weights loaded.</span>
+        <span class="c">│</span>
+   <span class="a">[3]</span>  share_features_extractor defaults True     <span class="c">policies.py:509</span>
+        <span class="c">│</span>        pi_features_extractor = vf_features_extractor = the same object
+        <span class="c">│</span>    <span class="c">← built ONCE. the checkpoint is not read twice.</span>
+        <span class="c">│</span>
+   <span class="a">[4]</span>  MlpExtractor built on top of features_dim  <span class="c">torch_layers.py:229</span>
+        <span class="c">│</span>        net_arch as a LIST -> pi and vf each get their own copy
+        <span class="c">│</span>
+   <span class="a">[5]</span>  <span class="x">orthogonal init applied</span>                    <span class="c">policies.py:616</span>
+        <span class="c">│</span>        module_gains = { <span class="x">self.features_extractor</span>: sqrt(2),
+        <span class="c">│</span>                         self.mlp_extractor    : sqrt(2),
+        <span class="c">│</span>                         self.action_net       : 0.01,
+        <span class="c">│</span>                         self.value_net        : 1 }
+        <span class="c">│</span>        for module, gain in module_gains.items():
+        <span class="c">│</span>            module.apply(init_weights)   <span class="x">← recurses into your encoder</span>
+        <span class="c">▼</span>
+   <span class="a">[6]</span>  optimizer over self.parameters()
+</pre>
+
+<p>Step 5 is the one to look at closely.</p>
+
+
+<h2 id="s7"><span class="num">7</span> A bug this timeline exposes</h2>
+
+<div class="alert">
+  <h3>Confirmed: orthogonal init overwrites 75.7% of the pretrained encoder</h3>
+  <p>SB3 applies orthogonal initialisation to <code>self.features_extractor</code> at step 5,
+  which is <em>after</em> your constructor loaded the checkpoint at step 2. Its
+  <code>init_weights</code> helper reinitialises every <code>nn.Linear</code> and
+  <code>nn.Conv2d</code> it finds, recursively. <code>ortho_init</code> defaults to
+  <code>True</code> and is not currently set in <code>build_policy_kwargs</code>.</p>
+  <p>Measured on a real build, Pong, frozen:</p>
+  <div class="bar">
+    <span style="width:75.7%;background:#c0392b">3,749,120 overwritten &nbsp;(75.7%)</span>
+    <span style="width:24.3%;background:#0f8a5f">1,204,224 kept</span>
+  </div>
+  <p style="margin-bottom:0">The frozen run then trains a policy on top of a mostly random
+  encoder, while printing every message that says the checkpoint loaded correctly.</p>
+</div>
+
+<h3>Which tensors survive, and why</h3>
+<table>
+  <thead><tr><th>Component</th><th>PyTorch type</th><th></th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">patch_embed.proj</td><td>nn.Conv2d</td>
+        <td><span class="pill bad">overwritten</span></td><td>matched by init_weights</td></tr>
+    <tr><td class="mono">blocks.*.linear1 / linear2</td><td>nn.Linear</td>
+        <td><span class="pill bad">overwritten</span></td><td>the whole feed-forward stack, all 6 blocks</td></tr>
+    <tr><td class="mono">blocks.*.self_attn.out_proj</td><td>nn.Linear subclass</td>
+        <td><span class="pill bad">overwritten</span></td><td><code>isinstance</code> matches subclasses too</td></tr>
+    <tr><td class="mono">blocks.*.self_attn.in_proj_weight</td><td>raw Parameter</td>
+        <td><span class="pill keep">survives</span></td><td>not wrapped in a Linear module</td></tr>
+    <tr><td class="mono">blocks.*.norm1 / norm2</td><td>nn.LayerNorm</td>
+        <td><span class="pill keep">survives</span></td><td>neither Linear nor Conv2d</td></tr>
+    <tr><td class="mono">patch_embed.pos_embed</td><td>raw Parameter</td>
+        <td><span class="pill keep">survives</span></td><td>same reason</td></tr>
+    <tr><td class="mono">env_embed</td><td>nn.Embedding</td>
+        <td><span class="pill keep">survives</span></td><td>same reason</td></tr>
+  </tbody>
+</table>
+
+<p>The surviving half is arguably worse than none surviving. Attention input projections and
+layer norms are kept while the output projections and every feed-forward block around them are
+replaced with random matrices. The result is not the pretrained model and not a clean random
+baseline either.</p>
+
+<h3>The fix</h3>
+<pre class="flow">
+  <span class="c">in build_policy_kwargs, for every pretrained arch:</span>
+  kwargs.update(
+      <span class="k">ortho_init=False,</span>
+      features_extractor_class=JepaExtractor,
+      ...
+  )
+</pre>
+
+<p>Verified on the same build:</p>
+<table>
+  <thead><tr><th>Setting</th><th>Encoder params differing from the checkpoint</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">ortho_init=True &nbsp;<span style="color:var(--muted)">(current default)</span></td>
+        <td class="num" style="color:var(--bad);font-weight:700">3,749,120 &nbsp;of&nbsp; 4,953,344</td></tr>
+    <tr><td class="mono">ortho_init=False</td>
+        <td class="num" style="color:var(--keep);font-weight:700">0 &nbsp;of&nbsp; 4,953,344</td></tr>
+  </tbody>
+</table>
+
+<p>The cost of the flag is that the policy and value heads lose orthogonal init too, falling
+back on PyTorch defaults. That is a mild and well-understood tradeoff. Keeping orthogonal init
+on the heads alone is possible, but needs the extractor's weights restored after construction
+rather than a single flag.</p>
+
+<div class="note">
+  <b>The baseline arm is unaffected.</b> NatureCNN is supposed to be randomly initialised, so
+  orthogonal init is correct there. The bug only touches arms that load pretrained weights,
+  which is every arm the study is actually about. The same mechanism hits the VAE and VQ-VAE
+  extractors, whose encoders are built from <code>nn.Conv2d</code> throughout.
+</div>
+
+
+<h2 id="s8"><span class="num">8</span> Freezing, both halves</h2>
+<p>Freezing needs two mechanisms because SB3 actively fights the obvious one.</p>
+
+<pre class="flow">
+  def _set_frozen(self, frozen):
+      self.frozen = frozen
+      if frozen:
+          for p in self.parameters():
+              p.requires_grad = False      <span class="c">◀ half 1: optimiser cannot update it</span>
+          self.eval()                      <span class="c">◀ half 1.5: dropout off, for now</span>
+
+  def train(self, mode=True):
+      return super().train(<span class="k">False if self.frozen else mode</span>)
+                            <span class="c">◀ half 2: and it STAYS off</span>
+</pre>
+
+<pre class="flow">
+  <span class="c">every PPO iteration:</span>
+
+  collect_rollouts()   →  policy.set_training_mode(<span class="k">False</span>)   <span class="c">on_policy_algorithm.py:184</span>
+  train()              →  policy.set_training_mode(<span class="w">True</span>)    <span class="c">ppo.py:189</span>
+                              <span class="c">│</span>
+                              <span class="c">│  self.train(True) recurses into EVERY submodule</span>
+                              <span class="c">▼</span>
+                          extractor.train(True)
+                              <span class="c">│</span>
+                              <span class="c">▼</span>
+                          <span class="k">overridden → super().train(False)</span>   <span class="c">← ignored</span>
+</pre>
+
+<p>Without the override, two things move even though no gradient reaches them. Dropout switches
+back on, making the "frozen" features stochastic and inconsistent between the rollout and the
+update computed from it. And the EMA codebook in the VQ-VAE arms rewrites itself from whatever
+batch it sees whenever it is in training mode, which is a parameter update with no optimiser
+involved.</p>
+
+<p>The startup print at <span class="file">train_sb3.py:196</span> is the check. For Pong the
+gap between the two modes should be exactly 4,953,344, the size of the encoder plus the
+embedding table.</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>Trainable</th><th>Total</th></tr></thead>
+  <tbody>
+    <tr><td><code>--frozen</code></td><td class="num">9,441,799</td><td class="num">14,395,143</td></tr>
+    <tr><td><code>--joint</code></td><td class="num">14,395,143</td><td class="num">14,395,143</td></tr>
+  </tbody>
+</table>
+<p style="font-size:14px;color:var(--muted)">
+  The frozen count is large because features are 9216-wide and <code>net_arch=[512]</code> as a
+  <em>list</em> gives the policy and the value function a 512-unit trunk each, not one shared
+  trunk. That is 2 &times; 9216 &times; 512 weights before the heads.
+</p>
+
+
+<h2 id="s9"><span class="num">9</span> build_policy_kwargs, the only public function</h2>
+
+<pre class="flow">
+  arch == "nature"            arch == "jepa"              everything else
+        <span class="c">│</span>                            <span class="c">│</span>                           <span class="c">│</span>
+        <span class="c">▼</span>                            <span class="c">▼</span>                           <span class="c">▼</span>
+  {net_arch:[512]}         JepaExtractor              PretrainedExtractor
+  <span class="c">early return</span>             + checkpoint               + arch name
+                           + game                     + checkpoint
+                           + env_mode                 + freeze
+                           + freeze
+</pre>
+
+<p>Two details in there are easy to miss and both are deliberate.</p>
+<ul>
+  <li><b><code>os.path.abspath(checkpoint)</code>.</b> SB3 saves
+      <code>features_extractor_kwargs</code> into the model zip. When
+      <span class="file">train_sb3.py</span> reloads the model for the final test evaluation,
+      the extractor is reconstructed from those saved kwargs and the checkpoint is read again.
+      A relative path recorded at save time would resolve against whatever directory the
+      reloading process happens to be in.</li>
+  <li><b><code>dict(net_arch=list(net_arch))</code>.</b> Copying the list stops SB3 or a caller
+      from mutating the module-level <code>NET_ARCH</code> default, which would leak into every
+      later run in the same process.</li>
+</ul>
+
+
+<h2 id="s10"><span class="num">10</span> Reference</h2>
+
+<h3>SB3 behaviours this file depends on</h3>
+<table>
+  <thead><tr><th>Behaviour</th><th class="mono">Source</th><th>Consequence here</th></tr></thead>
+  <tbody>
+    <tr><td>Extractor built via <code>features_extractor_class(obs_space, **kwargs)</code></td>
+        <td class="mono">policies.py:120</td><td>first arg is positional and implicit</td></tr>
+    <tr><td>Extractor shared between policy and value by default</td>
+        <td class="mono">policies.py:506</td><td>checkpoint read once, not twice</td></tr>
+    <tr><td><code>net_arch</code> defaults differ by extractor class</td>
+        <td class="mono">policies.py:497</td><td>why <code>NET_ARCH</code> is set explicitly</td></tr>
+    <tr><td>Orthogonal init applied to the extractor</td>
+        <td class="mono">policies.py:616</td><td>section 7, the bug</td></tr>
+    <tr><td><code>init_weights</code> hits Linear and Conv2d only</td>
+        <td class="mono">policies.py:313</td><td>why exactly 75.7% is lost</td></tr>
+    <tr><td>Images divided by 255 before the extractor</td>
+        <td class="mono">policies.py:130</td><td>encode functions must not rescale</td></tr>
+    <tr><td><code>set_training_mode(True)</code> every update</td>
+        <td class="mono">ppo.py:189</td><td>why <code>train()</code> is overridden</td></tr>
+    <tr><td>Extractor class and kwargs saved into the zip</td>
+        <td class="mono">policies.py:555</td><td>why the checkpoint path is absolute</td></tr>
+  </tbody>
+</table>
+
+<h3>Shapes</h3>
+<table>
+  <thead><tr><th>Stage</th><th class="mono">Shape</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>env observation</td><td class="mono">[B, 4, 84, 84]</td><td>uint8, 4 stacked frames</td></tr>
+    <tr><td>after SB3 preprocessing</td><td class="mono">[B, 4, 84, 84]</td><td>float32 in [0,1]</td></tr>
+    <tr><td>env embedding</td><td class="mono">[B, 256]</td><td>from a 16-slot table</td></tr>
+    <tr><td>encoder output</td><td class="mono">[B, 36, 256]</td><td>6&times;6 patch grid</td></tr>
+    <tr><td>extractor output</td><td class="mono">[B, 9216]</td><td>features_dim</td></tr>
+    <tr><td>policy / value trunks</td><td class="mono">[B, 512]</td><td>one each, not shared</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  Line numbers refer to <span class="file">PPO/universal/factory.py</span> as it stands now, and
+  to stable-baselines3 2.8.0 at
+  <span class="file">site-packages/stable_baselines3/</span>.
+  Parameter counts and the overwrite measurement come from constructing the real PPO policy on
+  PongNoFrameskip-v4 and comparing tensor by tensor against
+  <span class="file">vjepa_v2_best.pt</span>.
+</footer>
+
+</div>
+</body>
+</html>

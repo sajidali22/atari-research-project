@@ -1,0 +1,37 @@
+# NatureCNN trained from scratch, per game. this is the baseline to beat.
+#
+# ppo params are the rl-baselines3-zoo atari preset, which is basically
+# Schulman et al 2017 table 5. zoo differs from the paper in 2 spots:
+# n_epochs 3->4 and vf_coef 1.0->0.5, keeping the zoo values.
+
+extractor:
+  arch: nature
+  checkpoint: null    # nothing pretrained, it trains with the policy
+  freeze: true        # ignored for nature
+  env_mode: "true"    # jepa only. quoted on purpose, unquoted true is a yaml bool
+
+ppo:
+  total_timesteps: 10000000   # 10M, usual atari budget
+  n_envs: 8
+  n_steps: 128
+  batch_size: 256
+  n_epochs: 4
+  learning_rate: 2.5e-4       # decayed to 0
+  clip_range: 0.1             # same
+  gamma: 0.99
+  gae_lambda: 0.95
+  ent_coef: 0.01
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+
+# has to match jepa.yaml, otherwise the comparison is head size not representation
+policy:
+  net_arch: [512]
+
+eval:
+  eval_freq: 250000           # in env steps
+  n_eval_episodes: 10         # this is what decides best_model.zip
+  n_test_episodes: 30         # final held out eval
+  save_freq: 1000000
+  video_freq: 2000000         # set 0 to turn videos off
+  video_length: 3000

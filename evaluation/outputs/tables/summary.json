@@ -1,0 +1,28 @@
+{
+  "median_hns_seen": {
+    "nature": 0.7414225739361503,
+    "fsq_frozen": 0.309951879410819,
+    "fsq_joint": 1.0665203262530398,
+    "jepa_frozen": 0.04527075674862334,
+    "jepa_joint": 0.04270541114671441
+  },
+  "mean_hns_seen": {
+    "nature": 2.505868768263491,
+    "fsq_frozen": 0.5422408998189385,
+    "fsq_joint": 2.0227772023380974,
+    "jepa_frozen": 0.12882455085342162,
+    "jepa_joint": 0.06764588548438863
+  },
+  "median_hns_heldout": {
+    "fsq_frozen": 0.21189250415604266,
+    "fsq_joint": 0.45420282821652336
+  },
+  "games_joint_beats_frozen_fsq": 13,
+  "games_fsqjoint_ge_nature": 4,
+  "games_fsqfrozen_ge_nature": 0,
+  "fps": {
+    "nature": 976.4545454545455,
+    "jepa_frozen": 854.1818181818181,
+    "jepa_joint": 677.0909090909091
+  }
+}

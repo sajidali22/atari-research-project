@@ -1,0 +1,419 @@
+\documentclass[aspectratio=43,10pt]{beamer}
+
+% ---------------------------------------------------------------- look & feel
+\usetheme{Frankfurt}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,backgrounds}
+
+\definecolor{tudnavy}{HTML}{0F2B46}
+\definecolor{cNat}{HTML}{2A78D6}
+\definecolor{cFsqF}{HTML}{EB6834}
+\definecolor{cFsqJ}{HTML}{1BAF7A}
+\definecolor{cJep}{HTML}{EDA100}
+\definecolor{cGray}{HTML}{8A8A8A}
+
+\setbeamercolor{structure}{fg=tudnavy}
+\setbeamercolor{frametitle}{bg=tudnavy,fg=white}
+\setbeamercolor{title}{bg=tudnavy,fg=white}
+\setbeamercolor{section in head/foot}{bg=white,fg=tudnavy}
+\setbeamercolor{subsection in head/foot}{bg=white,fg=tudnavy}
+\setbeamercolor{footline}{bg=tudnavy,fg=white}
+\setbeamercolor{item}{fg=tudnavy}
+\setbeamercolor{block title}{bg=tudnavy,fg=white}
+\setbeamercolor{block body}{bg=tudnavy!6}
+\setbeamerfont{frametitle}{size=\large}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{section in toc}[ball]
+\setbeamertemplate{caption}[numbered]
+\setbeamertemplate{frametitle}{%
+  \nointerlineskip
+  \begin{beamercolorbox}[wd=\paperwidth,ht=2.4ex,dp=1.1ex,leftskip=0.6em]{frametitle}
+    \usebeamerfont{frametitle}\insertframetitle
+  \end{beamercolorbox}}
+
+% two-line footline as in the reference deck
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{\begin{beamercolorbox}[wd=\paperwidth,ht=2.4ex,dp=0.9ex]{footline}%
+    \scriptsize\hspace*{0.7em}\insertshortauthor\hfill\insertshortinstitute\hspace*{0.7em}%
+  \end{beamercolorbox}}%
+  \vskip0pt%
+  \hbox{\begin{beamercolorbox}[wd=\paperwidth,ht=2.4ex,dp=1.1ex]{footline}%
+    \scriptsize\hspace*{0.7em}\insertshorttitle\hfill\insertframenumber{} / \inserttotalframenumber\hspace*{0.7em}%
+  \end{beamercolorbox}}}
+
+% outline slide at the start of every section
+\AtBeginSection[]{%
+  \begin{frame}
+    \vfill
+    \tableofcontents[currentsection]
+    \vfill
+  \end{frame}}
+
+\makeatletter\newcommand{\tabinput}[1]{\@@input #1 }\makeatother
+
+% ---------------------------------------------------------------- title
+\title[Universal Feature Extractor for Atari]{TOWARDS A UNIVERSAL FEATURE\\EXTRACTOR FOR ATARI GAMES}
+\subtitle{Reconstruction, FSQ and Joint-Embedding Prediction}
+\author{Sajid Ali Sadruddin}
+\institute[Technische Universit\"at Dresden (TUD)]{Technische Universit\"at Dresden (TUD)}
+\date{September, 2026}
+\titlegraphic{\includegraphics[width=3.2cm]{figures/tud_logo.png}}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}
+  \vfill
+  \tableofcontents
+  \vfill
+\end{frame}
+
+% =================================================================
+\section{Introduction}
+
+\begin{frame}{Introduction}
+  \begin{itemize}\setlength\itemsep{0.6em}
+    \item Atari games are a standard benchmark for RL from pixels
+    \item Every game gives the same input: 4 stacked $84\times84$ grey-scale frames
+    \item Yet each agent learns its own CNN feature extractor (NatureCNN) from scratch,
+          using only the game reward
+    \item The games share a lot: sprites, balls, walls, scrolling backgrounds
+    \item \textbf{Idea:} pre-train \textbf{one} encoder on many games and reuse it for
+          PPO on every game
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Motivation and Research Questions}
+  \begin{itemize}\setlength\itemsep{0.4em}
+    \item A universal extractor could save interactions and compute, transfer to new games
+          and give one latent space for all games
+    \item Two design axes:
+      \begin{itemize}
+        \item \textbf{Objective:} reconstruct pixels (VQ-VAE, FSQ-VAE) or predict the next
+              state in latent space (V-JEPA)
+        \item \textbf{Usage:} keep the encoder \emph{frozen} or \emph{fine-tune} it with the policy
+      \end{itemize}
+  \end{itemize}
+  \vspace{0.3em}
+  \begin{block}{Research questions}
+    \small
+    \textbf{RQ1} Which objective gives the most useful features for PPO?\\
+    \textbf{RQ2} Frozen or fine-tuned?\\
+    \textbf{RQ3} Do the features generalise to unseen games?\\
+    \textbf{RQ4} What does it cost, and is it interpretable?
+  \end{block}
+\end{frame}
+
+% =================================================================
+\section{Data \& Games}
+
+\begin{frame}{Data Collection}
+  \centering
+  \resizebox{\textwidth}{!}{\input{figures/data_pipeline}}
+  \vspace{0.4em}
+  \begin{itemize}\small
+    \item Expert agents from HuggingFace, actions sampled (some sub-optimal play)
+    \item \textbf{Frame dataset:} 50\,k stacks/game (autoencoders)
+    \item \textbf{Transition dataset:} 2.75\,M $(s_t,a_t,s_{t+1},d_t)$ from 11 games (V-JEPA)
+    \item 11 pre-training games, 4 held-out games
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{The Games}
+  \centering
+  \includegraphics[width=\textwidth]{figures/games_grid.pdf}\\[0.3em]
+  {\footnotesize Frame $t$ (left) and the change to the next frame (right) for all 15 games;
+  $^\dagger$\,held-out games}
+\end{frame}
+
+\begin{frame}{How Different the Games Are}
+  \begin{itemize}\setlength\itemsep{0.55em}
+    \item \textbf{Appearance:} mean brightness 5 (DemonAttack) to 105 (Pong);
+          1\% to 95\% black pixels
+    \item \textbf{Motion:} in most games $<4\%$ of pixels move (Pong 1.7\%, Breakout 1.4\%)
+      \begin{itemize}
+        \item The important objects are a few small sprites
+      \end{itemize}
+    \item \textbf{Actions:} 4 to 18 actions, same index = different command per game
+      \begin{itemize}
+        \item Mapped to one common set of 18 ALE actions
+      \end{itemize}
+    \item \textbf{Episodes:} from $\sim$120 steps (Atlantis) to 12\,500 (Enduro)
+    \item \textbf{Expert data:} most frequent action = 67\% of steps in RoadRunner, 99\% in
+          Asteroids $\rightarrow$ few examples of alternative actions
+  \end{itemize}
+\end{frame}
+
+% =================================================================
+\section{Models}
+
+\begin{frame}{Autoencoders}
+  \begin{itemize}\setlength\itemsep{0.5em}
+    \item \textbf{VAE:} $7\times7$ latent, too coarse for small sprites (1 epoch only)
+    \item \textbf{Residual VQ-VAE:} $21\times21$ grid, codebook $K=512$, EMA updates
+      \begin{itemize}
+        \item Sprite-weighted version: moving pixels count $10\times$
+      \end{itemize}
+    \item \textbf{FSQ-VAE:} each of 4 channels rounded to $L=[8,5,5,3]$ levels
+      \begin{itemize}
+        \item No codebook, no commitment loss, no dead codes
+        \item Resize-convolution decoder (removed checkerboard artefacts)
+        \item Motion-balanced loss, moving pixels get 85\% of the weight:
+      \end{itemize}
+  \end{itemize}
+  \[
+    \mathcal{L}_{\text{bal}} = 0.85\,\tfrac{\sum m\odot(\hat x-x)^2}{\sum m}
+    +0.15\,\tfrac{\sum (1-m)\odot(\hat x-x)^2}{\sum (1-m)}
+  \]
+  \begin{itemize}
+    \item PPO feature: flattened $4\times21\times21$ grid (1\,764 values)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{V-JEPA: Architecture}
+  \centering
+  \resizebox{\textwidth}{!}{\input{figures/jepa_arch}}\\[0.4em]
+  {\footnotesize Predicts the \emph{latent} of the next frame stack; target encoder is an
+  EMA copy (no gradients). Only the context encoder is kept for PPO.}
+\end{frame}
+
+\begin{frame}{V-JEPA: What I Changed (v1 $\rightarrow$ v2)}
+  \begin{itemize}\setlength\itemsep{0.4em}
+    \item v1 trained well by its loss, but a pipeline check found bugs:
+      \begin{itemize}\small
+        \item action indices meant different commands in different games
+        \item large dataset loaded with the wrong axis order
+        \item validation set contained only one game
+      \end{itemize}
+    \item \textbf{v2} (following TD-MPC2):
+      \begin{itemize}\small
+        \item common 18-action space
+        \item learnable game embedding, replaced by UNKNOWN with $p=0.25$
+        \item SimNorm latents ($32\times$ softmax over $V=8$) against collapse
+        \item inverse-dynamics head, $\mathcal{L}=\mathcal{L}_{\text{JEPA}}+0.01\,\mathcal{L}_{\text{inv}}$
+      \end{itemize}
+  \end{itemize}
+  \vspace{0.2em}
+  {\footnotesize
+  \begin{tabular}{@{}lrcc@{}}
+    \toprule
+    Part & Params & $\nabla\mathcal{L}_{\text{JEPA}}$ & $\nabla\mathcal{L}_{\text{inv}}$ \\
+    \midrule
+    Context encoder & 4.95\,M & yes & yes \\
+    Predictor & 2.37\,M & yes & no \\
+    Inverse head & 0.20\,M & no & yes \\
+    Target encoder & 4.95\,M & \multicolumn{2}{c}{EMA only} \\
+    \bottomrule
+  \end{tabular}}
+\end{frame}
+
+% =================================================================
+\section{Methodology}
+
+\begin{frame}{Methodology: Pre-Training}
+  \centering
+  {\scriptsize\setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    & Residual VQ-VAE & FSQ-VAE & V-JEPA v2 \\
+    \midrule
+    Data & 550\,k stacks & 550\,k stacks & 2.75\,M transitions \\
+    Length & 15 epochs & 125 epochs & 92 epochs \\
+    Batch & 64 & 128 & 512 \\
+    Optimiser, LR & $3{\cdot}10^{-4}$ & AdamW, $3{\cdot}10^{-4}$ & AdamW, $3{\cdot}10^{-4}$ \\
+    Parameters & 0.70\,M & 0.84\,M & 12.5\,M \\
+    Hardware, time & Tesla T4, 3.0\,h & H100, 1.9\,h & H100, 15.6\,h \\
+    \bottomrule
+  \end{tabular}}
+  \vspace{0.8em}
+  \begin{itemize}\small\setlength\itemsep{0.4em}
+    \item Architectures follow the reference papers (VQ-VAE, FSQ, I-JEPA, TD-MPC2)
+    \item Smaller batch and learning rate than the JEPA papers: 12.5\,M model on one GPU
+    \item V-JEPA: best validation checkpoint (epoch 90); sweep confirmed $\lambda=0.01$
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Methodology: PPO and Evaluation}
+  \begin{itemize}\setlength\itemsep{0.55em}
+    \item \textbf{Baseline:} NatureCNN trained from scratch
+    \item \textbf{Frozen:} pre-trained encoder fixed, only actor and critic trained
+    \item \textbf{Fine-tuned:} pre-trained encoder trained together with the policy
+    \item \textbf{PPO:} RL-Zoo Atari settings, $10$\,M steps, $8\times128$ rollouts,
+          same 512-unit heads for all encoders
+    \item \textbf{Metric:} mean return over steps 9--10\,M, human-normalised score
+      \[\text{HNS}=\frac{\text{score}-\text{random}}{\text{human}-\text{random}}\]
+    \item All numbers from the full Weights \& Biases logs, one seed per run
+  \end{itemize}
+\end{frame}
+
+% =================================================================
+\section{Results}
+
+\begin{frame}{Results: Pre-Training}
+  \centering
+  \includegraphics[width=\textwidth]{figures/pretrain_curves.pdf}
+  \begin{itemize}\small\setlength\itemsep{0.35em}
+    \item Held-out error is lowest \textbf{early}: FSQ-VAE best after 3 epochs, then 21\% worse
+    \item V-JEPA held-out loss ends $3\times$ the seen loss $\rightarrow$ both models specialise
+          to the training games
+    \item V-JEPA loss \textbf{rises} while effective rank grows 1.4 $\rightarrow$ 57:
+          the low early loss was a nearly collapsed latent space
+    \item Reconstruction: FSQ-VAE has $3\times$ lower error on moving pixels than the VQ-VAE
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Results: Downstream RL}
+  \centering
+  {\footnotesize\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}lccccc@{}}
+    \toprule
+    & NatureCNN & \multicolumn{2}{c}{FSQ-VAE} & \multicolumn{2}{c}{V-JEPA} \\
+    \cmidrule(lr){3-4}\cmidrule(lr){5-6}
+    & scratch & frozen & fine-tuned & frozen & fine-tuned \\
+    \midrule
+    Median HNS (11 seen) & 0.74 & 0.31 & \textbf{1.07} & 0.05 & 0.04 \\
+    Mean HNS (11 seen) & \textbf{2.51} & 0.54 & 2.02 & 0.13 & 0.07 \\
+    Median HNS (4 held-out) & -- & 0.21 & \textbf{0.45} & -- & -- \\
+    \bottomrule
+  \end{tabular}}
+  \vspace{0.8em}
+  \begin{itemize}\small\setlength\itemsep{0.4em}
+    \item \textbf{FSQ fine-tuned:} beat NatureCNN on Breakout, Enduro, Qbert, Riverraid;
+          within 1\% on Pong and Seaquest
+    \item NatureCNN ahead on DemonAttack, RoadRunner, BeamRider, SpaceInvaders
+    \item \textbf{FSQ frozen:} learns in every game, but under a third of the fine-tuned median
+    \item Fine-tuning beat freezing on 13 of 15 games (Breakout $12\times$)
+    \item \textbf{V-JEPA:} learned very little in both settings
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Results: Learning Curves}
+  \centering
+  \includegraphics[width=\textwidth]{figures/learning_curves.pdf}\\[0.2em]
+  {\footnotesize Solid: trained or fine-tuned encoders; dashed: frozen encoders}
+\end{frame}
+
+\begin{frame}{Results: Sample Efficiency}
+  \begin{itemize}\setlength\itemsep{0.6em}
+    \item Steps needed to reach 50\% / 80\% of NatureCNN's final return
+    \item \textbf{FSQ fine-tuned is faster} at the 80\% level on Enduro, MsPacman, Qbert and
+          Riverraid
+      \begin{itemize}
+        \item 1.3--2.7\,M steps earlier (18--39\%)
+      \end{itemize}
+    \item Faster on 5 of 11 games at the 50\% level
+    \item NatureCNN is faster from the start on the games it wins
+    \item Where the pre-training helps, it helps a lot
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Results: Can the V-JEPA Features Be Fixed?}
+  \begin{itemize}\setlength\itemsep{0.55em}
+    \item First guess: the 9\,216-dim feature is too large for PPO
+    \item Repeated all 22 runs with a \textbf{pooled 256-dim} feature
+    \item Repeated frozen runs with a $5\times$ larger \textbf{entropy bonus}
+  \end{itemize}
+  \vspace{0.3em}
+  \centering
+  {\small
+  \begin{tabular}{@{}llcc@{}}
+    \toprule
+    Feature & Mode & Median HNS & Critic expl.\ var. \\
+    \midrule
+    9\,216 (flat) & frozen & 0.045 & 0.73 \\
+    256 (pooled) & frozen & 0.021 & 0.53 \\
+    256 (pooled) & fine-tuned & 0.007 & $-0.27$ \\
+    256, entropy 0.05 & frozen & 0.015 & 0.03 \\
+    \bottomrule
+  \end{tabular}}
+  \vspace{0.5em}
+  \begin{itemize}\small
+    \item Neither change helped $\rightarrow$ the problem is \emph{what} the features encode
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Results: World-Model Diagnostics}
+  \begin{itemize}\setlength\itemsep{0.55em}
+    \item Tested on 64 five-step sequences against a \textbf{copy baseline}, an untrained model
+          and \textbf{wrong actions}
+    \item \textbf{No collapse:} effective rank 52.5 vs.\ 2.5 untrained
+    \item \textbf{Real dynamics:} beats copying, gap grows from $+0.013$ (1 step) to $+0.046$ (5 steps)
+    \item \textbf{Weak action conditioning:} a wrong action changes the prediction by only 0.006
+    \item \textbf{Game embedding unused:} encoder recognises the game from pixels
+    \item \textbf{Held-out games:} worse than copying, inverse head below chance
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Results: Why the V-JEPA Failed with PPO}
+  \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{figures/pca_action_sensitivity.png}\\[0.2em]
+      {\scriptsize Predictions for all actions (dots) form one tight cluster}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \begin{itemize}\small\setlength\itemsep{0.45em}
+        \item JEPA predicts what is \emph{predictable}, small sprites can be ignored
+        \item Predictor mostly ignores the action
+        \item Latents change very little per step (cos.\ 0.974)
+        \item $14\times14$ patches too coarse for small objects
+        \item Latent space organised by game
+        \item Specialised to the pre-training games
+        \item Expert data shows few alternative actions
+        \item Good for the \textbf{value}, not for the \textbf{best action}
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% =================================================================
+\section{Conclusion}
+
+\begin{frame}{Conclusion}
+  \begin{itemize}\setlength\itemsep{0.55em}
+    \item \textbf{RQ1:} FSQ-VAE with a motion-aware loss gave the most useful features
+    \item \textbf{RQ2:} fine-tuning is clearly better than freezing
+      \begin{itemize}
+        \item FSQ fine-tuned is on par with NatureCNN: higher median HNS (1.07 vs.\ 0.74),
+              faster learning on 4 games
+      \end{itemize}
+    \item \textbf{RQ3:} no model generalised to unseen games without fine-tuning
+    \item \textbf{RQ4:} freezing saves little compute at this scale (976 vs.\ 854 steps/s)
+    \item V-JEPA learned real dynamics, but not the \textbf{effects of actions}
+    \item \textbf{Answer:} a shared encoder is a good \emph{starting point}, not yet a frozen
+          replacement
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Limitations and Future Work}
+  \begin{itemize}\setlength\itemsep{0.55em}
+    \item \textbf{Limitations:} one seed, two PPO implementations, no NatureCNN baseline on
+          held-out games, PPO not re-tuned for pre-trained encoders
+    \item \textbf{Future work:}
+      \begin{itemize}\setlength\itemsep{0.3em}
+        \item Repeat the main comparison with 3 seeds on one implementation
+        \item V-JEPA with smaller patches and an action-dependent objective
+              (multi-step prediction, reward head)
+        \item Check features by predicting object positions before running PPO
+        \item FSQ grid inside a world model, pre-training on more games
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \vfill
+  \centering
+  {\Huge\bfseries Thank You!}
+  \vfill
+\end{frame}
+
+\end{document}

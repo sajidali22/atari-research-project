@@ -56,7 +56,12 @@ class EmaVectorQuantizer(nn.Module):
             
             if torch.any(dead_codes):
                 num_dead = dead_codes.sum().item()
-                random_indices = torch.randperm(flat_inputs.size(0))[:num_dead]
+                n_inputs = flat_inputs.size(0)
+                if num_dead <= n_inputs:
+                    random_indices = torch.randperm(n_inputs)[:num_dead]
+                else:
+                    # fewer vectors than dead codes (e.g. 7x7 ViT tokens): sample with replacement
+                    random_indices = torch.randint(0, n_inputs, (num_dead,))
                 
                 # FIX 1: Add .detach() so we don't save the computation graph!
                 self.embeddings.weight.data[dead_codes] = flat_inputs[random_indices].detach()

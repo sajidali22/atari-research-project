@@ -1,0 +1,62 @@
+% V-JEPA v2 architecture (atari-DQN-v2/JEPA.py), used as \input{figures/jepa_arch}
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw=cGray, rounded corners=2pt, align=center, inner sep=3pt, fill=white,
+              minimum height=0.9cm},
+  arr/.style={-{Stealth[length=4pt]}, draw=black!70, line width=0.6pt},
+  larr/.style={-{Stealth[length=4pt]}, draw=red!65, line width=0.6pt},
+  lab/.style={font=\tiny, text=black!65}]
+
+  % ---------------------------------------------------------------- conditioning (top row)
+  \node[box] (drop) at (0,4.5) {game id $g$\\UNKNOWN w.p.\ 0.25};
+  \node[box, fill=cJep!15] (env) at (3.5,4.5)
+    {\textbf{game embedding} $e_g\in\mathbb{R}^{256}$\\$\|e_g\|\le1$; 16 slots (11 games,\\UNKNOWN, 4 reserved)};
+  \node[box, fill=cFsqJ!12] (act) at (8.6,4.5)
+    {\textbf{action} $a_t$: game's minimal index\\$\to$ look-up table $\to$ ALE-18\\$\to$ action embedding};
+  \draw[arr] (drop) -- (env);
+
+  % ---------------------------------------------------------------- online branch
+  \node[box] (st) at (0,2.2) {$s_t$\\$4{\times}84{\times}84$};
+  \node[box, fill=cNat!10, text width=3.45cm] (ce) at (3.5,2.2)
+    {\textbf{context encoder} $E_\theta$\\patchify $14{\times}14$ $\to$ 36 tokens,\\prepend $e_g$; 6 pre-LN blocks\\(8 heads, GELU); LN; SimNorm};
+  \node[box] (zt) at (6.25,2.2) {$z_t$\\$36{\times}256$};
+  \node[box, fill=cFsqJ!12, text width=2.6cm] (pr) at (8.6,2.2)
+    {\textbf{predictor} $P_\psi$\\tokens $[\,e_g\,|\,a_t\,|\,z_t\,]$\\3 pre-LN blocks; SimNorm};
+  \node[box] (zh) at (11.1,2.2) {$\hat z_{t+1}$\\$36{\times}256$};
+  \draw[arr] (st) -- (ce); \draw[arr] (ce) -- (zt); \draw[arr] (zt) -- (pr); \draw[arr] (pr) -- (zh);
+  \draw[arr] (env) -- (ce);
+  \draw[arr] (act) -- (pr);
+  \coordinate (ebend) at (7.75,3.45);
+  \draw[arr] (env.east) -- ++(0.3,0) |- (ebend) -- (ebend |- pr.north);
+  \node[lab, above] at (6.7,3.45) {$e_g$};
+
+  % ---------------------------------------------------------------- target branch
+  \node[box] (sn) at (0,0) {$s_{t+1}$\\$4{\times}84{\times}84$};
+  \node[box, fill=gray!12, text width=3.45cm] (te) at (3.5,0)
+    {\textbf{target encoder} $\bar E$\\same architecture, same $e_g$\\EMA of $E_\theta$ ($\tau{=}0.996$)\\no gradient};
+  \node[box] (zb) at (6.25,0) {$\bar z_{t+1}$\\$36{\times}256$};
+  \draw[arr] (sn) -- (te); \draw[arr] (te) -- (zb);
+  \draw[arr, dashed] (ce) -- node[right, lab]{EMA} (te);
+
+  % ---------------------------------------------------------------- losses
+  \node[box, draw=red!65, fill=red!4, text width=3.0cm] (lj) at (11.1,0)
+    {$\mathcal{L}_{\text{JEPA}}$: MSE$(\hat z_{t+1},\operatorname{sg}\bar z_{t+1})$\\only where $m_t{=}1$\\($m_t{=}0$ at episode ends)};
+  \draw[larr] (zh) -- (lj);
+  \draw[larr] (zb) -- (lj);
+
+  \node[box, fill=cJep!12, text width=3.75cm] (inv) at (6.8,-2.2)
+    {\textbf{inverse head}\\$[\operatorname{pool}(z_t),\operatorname{pool}(\bar z_{t+1}),e_g]$\\Linear 256, GELU, Linear 18;\\logits masked to valid actions of $g$};
+  \draw[arr] (zt.south east) -- ++(0.35,-0.35) -- ++(0,-2.2) -- ([xshift=0.35cm]inv.north);
+  \draw[arr] (zb) -- (zb |- inv.north);
+  \node[box, draw=red!65, fill=red!4] (li) at (9.75,-2.2) {$\mathcal{L}_{\text{inv}}$\\cross-entropy\\with true $a_t$};
+  \draw[larr] (inv) -- (li);
+  \node[box, draw=red!65, fill=red!10, font=\footnotesize] (tot) at (11.95,-2.2)
+    {$\mathcal{L}=\mathcal{L}_{\text{JEPA}}$\\$+\,0.01\,\mathcal{L}_{\text{inv}}$};
+  \draw[larr] (li) -- (tot);
+  \draw[larr] (lj.south) -- (tot.north);
+
+  % ---------------------------------------------------------------- use in PPO
+  \node[box, dashed, fill=cNat!5, text width=3.6cm] (ppo) at (1.9,-2.2)
+    {\textbf{downstream PPO}: $E_\theta$ with the game's $e_g$ (UNKNOWN if unseen)\\feature = $z_t$ flattened (9\,216) or pooled (256)};
+\end{tikzpicture}}

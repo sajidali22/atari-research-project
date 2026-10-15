@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from models.vqvae_simple import VectorQuantizer # Reusing our perfected quantizer!
+from models.ema_vqvae import EmaVectorQuantizer as VectorQuantizer  # vqvae_simple.py no longer exists
 
 class ViTEncoder(nn.Module):
     """

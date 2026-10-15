@@ -1,4 +1,46 @@
-*.zip
+# Large, regenerable or downloadable files: checkpoints, datasets, W&B exports, logs.
+# See README.md -> "Artifacts".
+artifacts/
+
+# Safety net in case a binary lands outside artifacts/
+*.pt
+*.pth
+*.npz
+*.npy
+*.pkl
+*.mp4
+.npy_cache/
+
+# Secrets
 colab_api.txt
-__pycache__
-wandb
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Run outputs
+wandb/
+runs/
+logs/
+ppo/runs/
+ppo/logs/
+
+# LaTeX build files
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+# ...but keep the JEPA diagnostics logs that make_figures.py parses
+!evaluation/outputs/results/*.log
+
+# Archives
+*.zip
+
+# Editors
+.vscode/

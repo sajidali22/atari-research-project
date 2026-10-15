@@ -1,0 +1,656 @@
+\documentclass[runningheads]{llncs}
+
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,backgrounds}
+\usepackage{subcaption}
+\usepackage[hidelinks]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+\usepackage{listings}
+\usepackage{placeins}
+
+\renewcommand\UrlFont{\color{blue}\rmfamily}
+\lstset{basicstyle=\ttfamily\scriptsize,columns=fullflexible,frame=single,
+        framerule=0.3pt,rulecolor=\color{gray},breaklines=true,xleftmargin=2pt}
+
+\makeatletter\newcommand{\tabinput}[1]{\@@input #1 }\makeatother
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\sg}{\operatorname{sg}}
+\newcommand{\gp}[1]{\textsc{#1}}
+
+% palette used in every figure (validated categorical slots 1-5)
+\definecolor{cNat}{HTML}{2A78D6}
+\definecolor{cFsqF}{HTML}{EB6834}
+\definecolor{cFsqJ}{HTML}{1BAF7A}
+\definecolor{cJep}{HTML}{EDA100}
+\definecolor{cGray}{HTML}{8A8A8A}
+
+\setlength{\textfloatsep}{9pt plus 2pt minus 3pt}
+\setlength{\floatsep}{7pt plus 2pt minus 2pt}
+\setlength{\intextsep}{7pt plus 2pt minus 2pt}
+
+\begin{document}
+
+\title{Towards a Universal Feature Extractor for Atari Games:\\
+Reconstruction, Finite Scalar Quantisation and\\ Joint-Embedding Prediction}
+\titlerunning{Towards a Universal Feature Extractor for Atari Games}
+
+\author{Sajid Ali Sadruddin}
+\authorrunning{Sajid Ali Sadruddin}
+\institute{TU Dresden, Germany\\[2pt]
+Research Project, supervised by Oleh Shkalikov}
+
+\maketitle
+
+\begin{abstract}
+Reinforcement learning (RL) agents for Atari games usually learn a new convolutional
+feature extractor for every single game, even though all games give the agent the same kind
+of input: four stacked $84\times84$ grey-scale frames. In this project, I investigated whether
+one encoder, pre-trained once on expert gameplay from eleven games, can be reused as a
+universal feature extractor for Proximal Policy Optimisation (PPO). I compared autoencoders
+with vector-quantised and Finite Scalar Quantisation (FSQ) bottlenecks against an action- and
+game-conditioned Joint-Embedding Predictive Architecture (V-JEPA) world model. Each encoder was
+used either frozen or fine-tuned together with the policy for 10\,M environment steps on
+eleven seen and four unseen games. The fine-tuned FSQ-VAE reached a higher median
+human-normalised score than a NatureCNN trained from scratch (1.07 vs.\ 0.74), beat it on four
+of eleven games, and on four games reached 80\% of its final level 1.3--2.7\,M steps earlier.
+Kept frozen, the same encoder reached less than a third of that median. The V-JEPA learned a
+healthy latent space and real dynamics on the seen games, but PPO could hardly use its
+features (median 0.05). My analysis shows that the model mostly ignored the action, produced
+very similar latents for consecutive frames and specialised to the pre-training games. Overall,
+a shared pre-trained encoder works well as a starting point, but not yet as a frozen
+replacement for the NatureCNN.
+\end{abstract}
+
+% =========================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Atari 2600 games, played through the Arcade Learning Environment~\cite{machado2018revisiting},
+are one of the most common benchmarks for learning control from pixels. Since
+DQN~\cite{mnih2015human}, the standard agent stacks the last four pre-processed frames and
+passes them through a small convolutional network, the NatureCNN, followed by a policy and a
+value head. All of this is trained from the game reward alone, and it is done again from
+scratch for every game. This is wasteful, because the games share the same input format and a similar
+visual vocabulary of sprites, balls, walls and scrolling backgrounds (\cref{fig:games}). A
+feature extractor that is trained once and then reused could save interactions and
+computation, transfer to new games, and give one latent space for all games.
+
+This project was proposed by Oleh Shkalikov. The question is whether such a
+\emph{universal feature extractor} can be trained for Atari, and I looked at it from two sides.
+The first is the pre-training objective: I used quantised
+autoencoders~\cite{vandenoord2017vqvae,mentzer2024fsq}, which learn by reconstructing the
+frames, and a joint-embedding predictive architecture
+(JEPA)~\cite{lecun2022path,assran2023ijepa,bardes2024vjepa}, which learns by predicting the
+next state in latent space. The second is how the extractor is used: kept frozen, or fine-tuned
+together with the policy. Specifically, I wanted to answer four questions: which objective
+gives the most useful features for PPO (\textbf{RQ1}), whether freezing or fine-tuning is
+better (\textbf{RQ2}), whether the features generalise to games that were not seen during
+pre-training (\textbf{RQ3}), and what the approach costs and how interpretable it is
+(\textbf{RQ4}).
+
+% =========================================================================
+\section{Related Work}
+\label{sec:related}
+
+PPO~\cite{schulman2017ppo} with the RL-Zoo hyper-parameters~\cite{raffin2020zoo} is the
+standard on-policy baseline for Atari. Many multi-game agents share the whole policy across
+games, while I only share the perception part, so that the effect of the representation can
+be measured on its own. Discrete latent spaces work well on Atari
+(DreamerV2~\cite{hafner2021dreamerv2}, IRIS~\cite{micheli2023iris}), and self-predictive methods
+such as ATC~\cite{stooke2021atc} and SPR~\cite{schwarzer2021spr} avoid reconstructing pixels.
+ATC even showed that an encoder trained without rewards can be frozen for some Atari games. In
+robotics, pre-trained encoders have been reported both as very effective~\cite{parisi2022pvr}
+and as no better than an encoder trained from scratch~\cite{hansen2022pretrained}, a tension I
+also ran into. For the JEPA, I borrowed the learnable task embeddings of the TD-MPC2 world
+model~\cite{hansen2024tdmpc2}.
+
+% =========================================================================
+\section{Prerequisites}
+\label{sec:prereq}
+
+\paragraph{Problem Formulation.} In every game $g$, the agent sees a frame stack
+$x_t\in[0,1]^{4\times84\times84}$ and can choose from its own set of 4 to 18 actions. A feature
+extractor $f_\theta$ maps $x_t$ to a feature vector, on which PPO trains an actor and a critic.
+The goal is one set of weights $\theta^\star$, learned without rewards on eleven games, that
+works for PPO on any game. I compare a NatureCNN trained from scratch (the baseline) with a
+pre-trained encoder that is either kept \emph{frozen} or \emph{fine-tuned} with the policy.
+
+\paragraph{Dataset.} Random play rarely gets past the first screen of a game, so I collected
+the data with pre-trained agents from the HuggingFace Hub (\cref{fig:data}a). Their actions were
+sampled from their policies, so the data also contains some sub-optimal behaviour. I built
+two datasets. The \emph{frame dataset} for the
+autoencoders contains 50\,k frame stacks per game, which gives 550\,k stacks from the eleven
+pre-training games and 200\,k from the four held-out games. The \emph{transition dataset} for
+the world model contains tuples $(s_t,a_t,s_{t+1},d_t)$: 250\,k per pre-training game (2.75\,M in
+total), a validation split of 10\,k per game and 50\,k per held-out game, each collected with a
+different seed. When an episode ends, I store the real last frame instead of the reset frame.
+Consecutive stacks share three of four frames, so the next state is already 75\% identical to
+the current one, and transitions at the end of an episode are masked out (\cref{fig:data}b).
+
+\begin{figure}[t]
+\centering
+\input{figures/data_pipeline}
+\caption{(a)~Data collection with pre-trained expert agents and the two resulting corpora.
+(b)~Processing at training time: frame-stack overlap, masking of episode-ending
+transitions, mapping of game-specific action indices to the canonical ALE-18 set, and the
+motion mask of the FSQ-VAE loss.}
+\label{fig:data}
+\end{figure}
+
+% =========================================================================
+\section{The Games}
+\label{sec:games}
+
+\Cref{fig:games} shows all 15 games as the encoder sees them. Eleven are used for pre-training
+and four are held out for testing generalisation. Every game produces a tensor of the same
+shape, but its content differs a lot (\cref{tab:games}), and one shared encoder has to handle
+all of these differences at once.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/games_grid.pdf}
+\caption{All 15 games as the encoder sees them: the newest frame $t$ of an expert frame stack
+(left of each pair) and $|x_{t+1}-x_t|$, the change to the next frame (right, inverted, per-image
+contrast). $^\dagger$\,held-out games. Frames from the data specimen sheet of the transition
+corpus.}
+\label{fig:games}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{How the games differ. $|\mathcal{A}|$: minimal action set; pixel mean (0--255) and
+black \% of the frames; moving \%: pixels that change within a stack ($\delta=0.05$); steps per
+terminal (the Atari wrappers also end an episode on a life loss); top action: share of the
+expert's most frequent action. 50\,k transitions per game; $^\dagger$\,held-out.}
+\label{tab:games}
+\scriptsize\setlength{\tabcolsep}{2.2pt}
+\begin{tabular}{@{}llccrrrrr@{}}
+\toprule
+Game & Type & $|\mathcal{A}|$ & Expert & Pix. & Black & Mov. & Steps/ & Top \\
+ & & & & mean & \% & \% & term. & act.\ \% \\
+\midrule
+\tabinput{tables/games_rows.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Appearance.} The average brightness goes from 5 (DemonAttack) to 105 (Pong), and
+the share of completely black pixels from 1\% (Pong) to 95\% (Asteroids). Shooting games are
+mostly empty space, while sports and scrolling games fill the whole screen.
+
+\paragraph{Motion.} In most games, less than 4\% of the pixels change within a frame stack
+(Pong 1.7\%, Breakout 1.4\%, IceHockey 1.1\%). Only the scrolling and pseudo-3D games move large
+parts of the screen (Riverraid 10\%, BeamRider 34\%). So the objects that matter for playing
+are usually a few small sprites on a static background, which a loss that treats every pixel
+equally can almost ignore.
+
+\paragraph{Actions and episode length.} The number of actions ranges from 4 to 18, and the same
+action index means a different joystick command in different games. A shared action embedding
+therefore needs a common action set (\cref{sec:models}). Episodes last
+from about 120 steps (Atlantis) to 12\,500 steps (Enduro). The expert data is also not equally
+varied: the expert's most frequent action covers 8\% of the steps in Seaquest, but 67\% in
+RoadRunner and 99\% in Asteroids. For these games, the data rarely shows what would have
+happened after a different action.
+
+% =========================================================================
+\section{Models}
+\label{sec:models}
+
+All encoders take the same input $x\in[0,1]^{4\times84\times84}$. After pre-training I throw
+away the decoder or predictor and only keep the encoder, whose output is passed to the actor
+and critic of PPO. The baseline is the NatureCNN with a 512-dimensional feature, trained from
+scratch.
+
+\subsection{Autoencoders}
+
+I started with a Gaussian VAE~\cite{kingma2014vae} with the NatureCNN layers as encoder,
+but only trained it for one epoch: its $7\times7$ latent grid makes each cell responsible for a
+$12\times12$ pixel region, much larger than a ball or a bullet. I therefore moved to spatial,
+discrete bottlenecks.
+
+\paragraph{Residual VQ-VAE.} This model keeps a finer $21\times21$ latent grid, using two
+stride-2 convolutions and two residual blocks. Each 64-dimensional latent cell is replaced by
+the closest of $K=512$ codebook vectors, and the gradient is passed through with the
+straight-through trick. The codebook is updated with exponential moving averages
+($\gamma=0.99$), the commitment weight is $\beta=0.25$, and codes that are no longer used are
+re-initialised. When I looked at the reconstructions, small moving objects were often missing.
+To fix this, I trained a second version in which the error of moving pixels,
+$m=\mathbf{1}[\max_j|x^{(j+1)}-x^{(j)}|>0.05]$, counts ten times more.
+
+\paragraph{FSQ-VAE.} Finite Scalar Quantisation~\cite{mentzer2024fsq} removes the codebook
+completely. A three-layer convolutional encoder produces four channels, and each channel is
+rounded to a fixed number of levels, $L=[8,5,5,3]$, which gives 600 possible values per latent
+cell. There is no codebook, no commitment loss and no unused codes. My first version used
+transposed convolutions in the decoder, which produced checkerboard patterns on the flat Atari
+backgrounds, so I replaced them with upsampling followed by normal convolutions. Instead of the
+fixed factor of ten, the final loss treats moving and static pixels separately:
+\begin{equation}
+  \mathcal{L}_{\text{bal}} = w\,\tfrac{\sum m\odot(\hat x-x)^2}{\sum m}
+  +(1-w)\,\tfrac{\sum (1-m)\odot(\hat x-x)^2}{\sum (1-m)},\qquad w=0.85.
+\end{equation}
+This way, the moving pixels always get 85\% of the loss, no matter how few of them there are.
+For PPO, the feature is the flattened $4\times21\times21$ quantised grid (1\,764 values).
+
+\subsection{Action- and Game-Conditioned V-JEPA}
+
+A JEPA does not reconstruct pixels. Instead, it learns to predict the \emph{representation}
+of the next observation~\cite{lecun2022path}. If the prediction also receives the action, the
+model becomes a latent world model, similar to SPR~\cite{schwarzer2021spr}. \Cref{fig:jepa}
+shows my final model. A $14\times14$ patch embedding turns a frame stack into 36 tokens of
+size 256. The context encoder $E_\theta$, a six-layer transformer, encodes $s_t$, and the
+target encoder $\bar E$, an exponential moving average (EMA) of $E_\theta$ with $\tau=0.996$
+that receives no gradients~\cite{assran2023ijepa}, encodes $s_{t+1}$. A three-layer predictor
+$P_\psi$ gets the context tokens together with an action token and a game token, and has to
+predict the target tokens:
+\begin{equation}
+  \mathcal{L}_{\text{JEPA}}=\frac{\sum_i m_i\,\big\|P_\psi\big(E_\theta(s_t^i,e^i),a_t^i,e^i\big)
+  -\operatorname{sg}\big(\bar E(s_{t+1}^i,e^i)\big)\big\|_2^2}{\sum_i m_i},
+\end{equation}
+where $m_i=0$ for transitions that end an episode.
+
+My first version trained well according to its loss curve, but a detailed check of the
+pipeline showed that action indices meant different commands in different games, the large
+dataset was loaded with the wrong axis order, and the validation set only contained one game.
+I rebuilt the model (v2) following TD-MPC2~\cite{hansen2024tdmpc2}. First, all actions are mapped to the common set of 18 ALE
+actions. Second, each game gets a learnable embedding $e_g$ with $\|e_g\|\le1$, which is added
+as a token to both encoders and the predictor. With probability 0.25 it is replaced by a shared
+UNKNOWN embedding, so that the model also learns a general ``Atari'' prior for unseen games.
+Third, all latents are normalised with SimNorm, which splits them into 32 groups of $V=8$ values
+and applies a softmax to each group. This keeps them bounded and makes collapse harder. Fourth,
+an inverse-dynamics head~\cite{pathak2017icm} predicts the action $a_t$ from $z_t$,
+$\bar z_{t+1}$ and $e_g$, only among the actions that are valid in the game. The total loss is
+$\mathcal{L}=\mathcal{L}_{\text{JEPA}}+\lambda\mathcal{L}_{\text{inv}}$ with $\lambda=0.01$.
+
+\paragraph{Training Step.} The target branch is computed without gradients, both losses are
+averaged over the same unmasked samples, the gradients are clipped to a norm of 1.0, AdamW
+updates the trainable parts, and only then is the target encoder moved slightly towards the
+context encoder (\cref{tab:grad}). The target is therefore a slowly moving goal that the context
+encoder cannot change directly, which prevents collapse to a constant output. Note also that
+the inverse loss trains the encoder but \emph{not} the predictor, because its second input is
+the target latent and not the prediction.
+
+\paragraph{Using the Encoder in PPO.} For PPO, the context encoder receives the game's own
+embedding (or UNKNOWN for unseen games) and produces $36\times256$ tokens. In the main runs I
+flatten them into a 9\,216-dimensional feature, and in a second set of runs I average them into
+a 256-dimensional feature.
+
+\begin{table}[t]
+\centering
+\caption{Gradient routing in the V-JEPA (12.48\,M parameters, 7.53\,M trainable).}
+\label{tab:grad}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrccl@{}}
+\toprule
+Parameter group & Params & $\nabla\mathcal{L}_{\text{JEPA}}$ & $\nabla\mathcal{L}_{\text{inv}}$ & Update \\
+\midrule
+Context encoder (patchify, 6 blocks, LN) & 4.95\,M & yes & yes & AdamW \\
+Predictor (action emb., 3 blocks, LN) & 2.37\,M & yes & no & AdamW \\
+Inverse head ($768\to256\to18$) & 0.20\,M & no & yes & AdamW \\
+Game embeddings ($16\times256$) & 0.004\,M & yes & yes & AdamW \\
+Target encoder (copy of context enc.) & 4.95\,M & no & no & EMA only \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\input{figures/jepa_arch}
+\caption{Environment- and action-conditioned V-JEPA (v2), as implemented. The target
+encoder is an EMA copy of the context encoder; only the context encoder is kept for PPO.}
+\label{fig:jepa}
+\end{figure}
+
+% =========================================================================
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Training Configurations}
+
+\begin{table}[t]
+\centering
+\caption{Training configurations of the four encoders used with PPO (``this work'') and
+the setting of the reference paper each follows. ``--'': not specified, or not logged.}
+\label{tab:pretrain}
+\scriptsize\setlength{\tabcolsep}{2.5pt}
+\newcolumntype{Y}[1]{>{\raggedright\arraybackslash}p{#1}}
+\begin{tabular}{@{}Y{1.6cm}Y{2.25cm}Y{2.2cm}Y{2.95cm}Y{2.25cm}@{}}
+\toprule
+ & Residual VQ-VAE & FSQ-VAE & V-JEPA v2 & NatureCNN \\
+\midrule
+\multicolumn{5}{@{}l}{\textit{This work}} \\
+Objective & MSE$^{a}$ + VQ + commit. & $\mathcal{L}_{\text{bal}}$, $w=0.85$ &
+  $\mathcal{L}_{\text{JEPA}}+0.01\,\mathcal{L}_{\text{inv}}$ & PPO only (no pre-training) \\
+Data & 550\,k stacks & 550\,k stacks & 2.75\,M transitions & online, $10^7$ steps/game \\
+Length & 15 ep.\ (129\,k steps) & 125 ep.\ (537\,k steps) & 92 ep.\ (21.2\,k steps) & 9.8\,k rollouts \\
+Batch & 64 & 128 & 512 & $8\times128$; minibatch 256 \\
+Optimiser, LR & $3{\cdot}10^{-4}$ & AdamW, $3{\cdot}10^{-4}$ & AdamW, $3{\cdot}10^{-4}$ & Adam, $2.5{\cdot}10^{-4}\to0$ \\
+Weight decay & -- & $10^{-4}$ & $10^{-5}$ (not LN/emb.) & 0 \\
+Schedule & -- & 100 ep.\ const.\ + cosine & warm-up + cosine & linear to 0 \\
+Bottleneck / target & $K{=}512$, $d{=}64$, $\beta{=}0.25$, EMA 0.99 & FSQ $L{=}[8,5,5,3]$ (600) &
+  EMA $\tau{=}0.996$ (fixed); SimNorm $V{=}8$; patch 14 & -- \\
+Parameters & 0.70\,M & 0.84\,M & 12.5\,M & 1.68\,M \\
+Hardware, time & Tesla T4, 3.0\,h & H100, 1.9\,h & H100, 15.6\,h & H100, 3.0\,h/game \\
+\midrule
+\multicolumn{5}{@{}l}{\textit{Reference setting}} \\
+Source & VQ-VAE~\cite{vandenoord2017vqvae} & FSQ~\cite{mentzer2024fsq} &
+  I-JEPA~\cite{assran2023ijepa} / V-JEPA~\cite{bardes2024vjepa} / TD-MPC2~\cite{hansen2024tdmpc2} &
+  PPO~\cite{schulman2017ppo}, RL-Zoo~\cite{raffin2020zoo} \\
+Length & 250\,k steps & -- & 300 ep.\ / 90\,k it. / -- & $10^7$ steps (40\,M frames) \\
+Batch & 128 & -- & 2\,048 / 3\,072 / 256 & $8\times128$; minibatch $32\times8$ \\
+Optimiser, LR & Adam, $2{\cdot}10^{-4}$ & -- & AdamW, $10^{-3}$ / $6.25{\cdot}10^{-4}$ / Adam, $3{\cdot}10^{-4}$ &
+  Adam, $2.5{\cdot}10^{-4}\cdot\alpha$ \\
+Weight decay & -- & -- & $0.04\to0.4$ (I-, V-JEPA) & -- \\
+Bottleneck / target & $K{=}512$, $\beta{=}0.25$, EMA 0.99 & $[8,6,5]$ ($2^8$), $[8,5,5,5]$ ($2^{10}$) &
+  EMA $0.996\to1$ / $0.998\to1$; SimNorm $V{=}8$; patch 14 / 16 & 3 epochs, VF coef.\ 1 (Zoo: 4, 0.5) \\
+\bottomrule
+\end{tabular}\\[2pt]
+{\scriptsize $^{a}$\,plain MSE, or with moving pixels weighted $10\times$ (sprite-weighted variant).}
+\end{table}
+
+\Cref{tab:pretrain} shows how I trained each encoder, next to the setting of the paper it
+follows. The architectures follow the references. The differences come from scale: the JEPA
+papers train very large vision transformers on huge datasets, while my model has 12.5\,M
+parameters and was trained on one GPU, so I used a smaller batch, a lower learning rate, less
+weight decay and a fixed EMA momentum. For the V-JEPA, I used the checkpoint with the lowest
+validation loss (epoch 90 of 92), and a small sweep over $\lambda\in\{0.003,0.01,0.03,0.1\}$
+confirmed $\lambda=0.01$.
+
+\subsection{PPO Training and Evaluation}
+
+All PPO agents use the standard RL-Zoo Atari settings (last column of \cref{tab:pretrain},
+with $\gamma=0.99$, $\lambda_{\text{GAE}}=0.95$, clip range 0.1 and entropy coefficient 0.01)
+and the same 512-unit actor and critic heads. The FSQ agents (15 games) were trained with a
+CleanRL-style PPO loop, and the NatureCNN and V-JEPA agents (11 seen games) with
+Stable-Baselines3. To measure performance, I use the mean training return over the last 10\%
+of training (steps 9--10\,M). To compare games with very different score ranges, I convert it to
+the human-normalised score HNS$=(\text{score}-\text{random})/(\text{human}-\text{random})$ with
+the reference scores from Badia et al.~\cite{badia2020agent57}, and I mainly report the median
+over games. All numbers are computed from the complete logs in Weights \& Biases. Because every
+configuration was run with only one seed, small differences should not be over-interpreted~\cite{agarwal2021precipice}.
+
+% =========================================================================
+\section{Results}
+\label{sec:results}
+
+\subsection{Pre-Training}
+\label{sec:pretrain-res}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/pretrain_curves.pdf}
+\caption{Pre-training curves. (a)~FSQ-VAE reconstruction MSE on the held-out games per
+epoch. (b--d)~V-JEPA: latent loss on seen (true game id) and held-out games (UNKNOWN),
+effective rank of the context latents, and inverse-dynamics accuracy.}
+\label{fig:pretrain}
+\end{figure}
+
+The pre-training curves (\cref{fig:pretrain}) showed two things I did not expect. First, the
+error on the held-out games was lowest very early. The FSQ-VAE had its lowest held-out error
+after only three epochs and ended 21\% higher after 125 epochs. For the V-JEPA, the held-out
+loss ended three times higher than on the seen games, and the held-out inverse accuracy dropped
+below chance. Both models therefore specialised to the pre-training games. Second, a rising
+loss was not a bad sign for the V-JEPA. Its validation loss was lowest in the first epoch and
+then went up, while the effective rank of its latents grew from 1.4 to 57 (out of 256) and the
+inverse accuracy from 23\% to 58\% (chance: 13\%). The low loss at the start simply came from an
+almost collapsed latent space, where prediction is easy.
+
+For reconstruction, I evaluated the autoencoders on 256 stacks per game. On the seen games the
+FSQ-VAE had the lowest error ($0.37\cdot10^{-3}$) and three times less error on moving pixels than
+the plain VQ-VAE, so the balanced loss and the new decoder did help with small sprites.
+Weighting the sprites in the VQ-VAE reduced the moving-pixel error by 27\%, but increased the
+overall error by 19\%. On the held-out games, all errors were four to eleven times higher and the
+FSQ-VAE was the worst, so none of the autoencoders generalised to new games at the pixel level.
+
+\subsection{Downstream Reinforcement Learning}
+\label{sec:rl}
+
+\begin{table}[t]
+\centering
+\caption{Mean episode return over the last 10\% of 10\,M training steps (single seed); best
+per game in bold. $^\dagger$\,held-out games (FSQ runs only). V-JEPA with the flattened
+feature; the pooled variant is in \cref{tab:jepa-abl}.}
+\label{tab:scores}
+\footnotesize\setlength{\tabcolsep}{3.8pt}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+ & NatureCNN & \multicolumn{2}{c}{FSQ-VAE} & \multicolumn{2}{c}{V-JEPA} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Game & scratch & frozen & joint & frozen & joint \\
+\midrule
+\tabinput{tables/scores_rows.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/learning_curves.pdf}
+\caption{Learning curves over 10\,M agent steps (100 bins; FSQ curves smoothed over five).
+Solid: trained or fine-tuned encoders; dashed: frozen encoders.}
+\label{fig:curves}
+\end{figure}
+
+\paragraph{FSQ-VAE, Fine-Tuned.} Fine-tuning the pre-trained FSQ encoder gave the best agent
+overall (\cref{tab:scores,fig:curves}). It matched or beat the NatureCNN on Breakout, Enduro,
+Qbert and Riverraid, was within 1\% on Pong and Seaquest, and reached a higher median HNS (1.07
+vs.\ 0.74). The NatureCNN stayed ahead on DemonAttack, RoadRunner, BeamRider and SpaceInvaders,
+which is why its mean HNS is higher (2.51 vs.\ 2.02). Where the pre-training helped, it helped a
+lot (\cref{tab:sampleeff}): on Enduro, MsPacman, Qbert and Riverraid, the fine-tuned agent
+reached 80\% of the NatureCNN's final level 1.3--2.7\,M steps (18--39\%) earlier, and at the
+50\% level it was faster on five games.
+
+\begin{table}[t]
+\centering
+\caption{Sample efficiency: million steps until the learning curve first covers 50\% and 80\%
+of the way from NatureCNN's initial to its final return (``--'': never). FSQ-J/F: FSQ-VAE
+joint/frozen. Fastest in bold.}
+\label{tab:sampleeff}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+ & \multicolumn{3}{c}{50\% level} & \multicolumn{3}{c}{80\% level} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+Game & Nature & FSQ-J & FSQ-F & Nature & FSQ-J & FSQ-F \\
+\midrule
+\tabinput{tables/sample_eff_rows.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{FSQ-VAE, Frozen.} With a frozen FSQ encoder the agent still learned something in
+every game, but much less (median HNS 0.31). It only came close to the NatureCNN on Pong and
+MsPacman. It struggled most where the important object is small and fast (Breakout,
+DemonAttack, BeamRider) or where the screen scrolls (RoadRunner, Riverraid). Even with the
+motion-aware loss, reconstruction still spends most of its capacity on large areas.
+
+\paragraph{V-JEPA.} Both V-JEPA agents learned very little (median HNS 0.05 frozen and 0.04
+fine-tuned), even though the frozen critic predicted the returns quite well (explained
+variance 0.56--0.97). Fine-tuning was also unstable: on Pong the agent reached $+8.4$ after 7\,M
+steps and then fell back to $-15$. My first guess was that the 9\,216-dimensional feature was
+too large, so I repeated all 22 runs with the tokens averaged into a
+256-dimensional feature and separate encoders for actor and critic, and repeated the frozen
+runs once more with a five times larger entropy bonus (\cref{tab:jepa-abl}). Neither change
+helped: the pooled frozen agent beat the flattened one on only one game, the pooled fine-tuned
+policy became almost deterministic on ten games, and the larger entropy bonus kept the policy
+random but stopped the critic from learning.
+
+\begin{table}[t]
+\centering
+\caption{V-JEPA feature ablation (11 seen games): median HNS of the training return and of
+the final policy on 30 test episodes, end-of-training critic explained variance and policy
+entropy, and games on which the pooled variant beats the flattened one.}
+\label{tab:jepa-abl}
+\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lcccccccc@{}}
+\toprule
+ & & & \multicolumn{2}{c}{median HNS} & expl. & & & \\
+\cmidrule(lr){4-5}
+Feature & mode & ent.\ coef. & train & test & var. & entropy & FPS & wins \\
+\midrule
+\tabinput{tables/jepa_ablation_rows.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Frozen vs.\ Fine-Tuned and Unseen Games.} For the FSQ encoder, fine-tuning beat
+freezing on 13 of 15 games, sometimes by a large factor (Breakout $12\times$, DemonAttack
+$7\times$). It also helped on the four held-out games (median HNS 0.45 vs.\ 0.21; Alien 2\,071,
+IceHockey $-3.4$). Since I did not train a NatureCNN on these games, I cannot say that the
+pre-training actually helped there, only that it did not stop the agent from learning.
+
+\subsection{World-Model Diagnostics}
+\label{sec:jepa-diag}
+
+A high similarity between predicted and real latents can be misleading: a collapsed encoder
+makes all latents similar, and since $s_{t+1}$ shares three frames with $s_t$, simply copying
+$z_t$ already scores well. I therefore tested the V-JEPA on 64 sequences of five steps
+and compared it with a copy baseline, an untrained model, and deliberately wrong actions
+(\cref{tab:jepa}).
+
+\begin{table}[t]
+\centering
+\caption{V-JEPA diagnostics: seen games (validation split, true game embedding) and held-out
+games (UNKNOWN embedding); chance or untrained values in brackets.}
+\label{tab:jepa}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Diagnostic & 11 seen games & 4 held-out games \\
+\midrule
+Cos.\ sim.\ predictor / identity, $k=1$ & 0.987 / 0.974 & 0.939 / 0.971 \\
+Cos.\ sim.\ predictor / identity, $k=5$ & 0.961 / 0.915 & 0.806 / 0.912 \\
+Action sensitivity: sim.\ true $-$ wrong action & +0.0057 & +0.0001 \\
+Attention on action / game token (uniform 0.026) & 0.029 / 0.046 & 0.026 / 0.055 \\
+Inverse-dynamics accuracy & 55.9\% (12.9\%) & 1.8\% (5.6\%) \\
+Effective rank / 256 & 52.5 (2.5) & 29.9 (1.5) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On the seen games the latent space did not collapse (effective rank 52.5 compared with 2.5 for
+an untrained model), and the predictor was better than copying at every step. The gap even grew
+from $+0.013$ after one step to $+0.046$ after five steps, when the input and target no longer
+share any frames, so the model did learn real dynamics. However, the action had very little
+influence: giving the predictor a wrong action changed its output by only 0.006, and the
+action token received hardly more attention than an average token. The game embedding was
+also unused, because the encoder recognised the game from the pixels. On the
+held-out games the predictor was worse than copying and the inverse head was below chance, so
+the model had learned the eleven training games and not Atari in general.
+
+\subsection{Why the V-JEPA Failed with PPO}
+\label{sec:jepa-fail}
+
+Judged by its own training goals, the V-JEPA worked well, but PPO could not use its features.
+\Cref{tab:jepa-fail} summarises the evidence I collected, and \cref{fig:pca} shows the main
+problem visually.
+
+\begin{table}[!ht]
+\centering
+\caption{Evidence for why the V-JEPA encoder did not support PPO (from
+\cref{sec:pretrain-res,sec:jepa-diag} and \cref{tab:jepa-abl}).}
+\label{tab:jepa-fail}
+\scriptsize\setlength{\tabcolsep}{3pt}
+\newcolumntype{Y}[1]{>{\raggedright\arraybackslash}p{#1}}
+\begin{tabular}{@{}Y{2.6cm}Y{5.0cm}Y{4.2cm}@{}}
+\toprule
+Explanation & Evidence & Consequence for PPO \\
+\midrule
+Dynamics ignore the action & true vs.\ wrong action: $\Delta$cos.\ 0.006; action-token attention
+  0.029 (uniform 0.026); \cref{fig:pca} & latent need not encode what the agent controls \\
+Latents change slowly & $\cos(z_t,\bar z_{t+1})=0.974$; 0.915 five steps later;
+  $14{\times}14$ patches & small, decisive sprite motion barely moves the feature \\
+Organised by game & t-SNE clusters by game; game embedding unused & capacity spent on
+  information that is constant within a run \\
+Specialised to pre-training games & held-out loss $3\times$ seen; held-out inverse accuracy
+  below chance & tuned to expert states of eleven games \\
+State, not action, information & critic expl.\ var.\ 0.56--0.97 while policy entropy stays
+  high (1.53 vs.\ 1.21) & value readable, best action not \\
+Little action variety in the data & expert's top action: 45\% (Qbert), 67\% (RoadRunner) of
+  steps (\cref{tab:games}) & few examples of what \emph{other} actions would change \\
+Not size or exploration & pooled 256-d feature, entropy bonus 0.05: no gain & rules out the
+  simplest remedies \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.36\textwidth]{figures/pca_action_sensitivity.png}
+\caption{PCA of V-JEPA latents for five states: context $z_t$ (square), true next latent
+(star) and the prediction for every valid action (dots). The predictions for all actions form
+one tight cluster near $z_t$: the predictor hardly distinguishes between actions.}
+\label{fig:pca}
+\end{figure}
+
+I think the main reason is a mismatch between what the JEPA is trained to do and what a policy
+needs. A JEPA predicts what is \emph{predictable} about the next frame, and it can ignore
+details that do not change the latent error much~\cite{lecun2022path,assran2023ijepa}. In Atari,
+these details, such as the exact position of the ball or of a bullet, are exactly what the agent
+needs in order to act. A representation that is good for control should capture what the
+agent's actions change~\cite{gelada2019deepmdp}, and this is what my predictor
+modelled worst (\cref{fig:pca}). The inverse loss was meant to fix this, but it only trains the
+encoder (\cref{tab:grad}), and the expert data contains few examples of alternative actions.
+The overlapping frames and the slowly moving EMA target also push the model towards latents
+that change very little from one step to the next. Such features are good enough to estimate
+how good a state is (the critic's explained variance was high), but too smooth to separate two
+states whose best actions differ by a few pixels. Finally,
+fine-tuning a 12.5\,M-parameter transformer with PPO's learning rate was unstable, which agrees
+with reports that pre-trained visual features transfer poorly to
+control~\cite{hansen2022pretrained,parisi2022pvr}.
+
+\FloatBarrier
+% =========================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+In this project, I investigated whether one pre-trained encoder can serve as a universal
+feature extractor for Atari games. I collected expert data from 15 games, trained VAE, VQ-VAE,
+FSQ-VAE and V-JEPA encoders, and used them with PPO for 10\,M steps, either frozen or
+fine-tuned. My answer is: partly.
+
+The FSQ-VAE, pre-trained without any rewards on eleven games, turned out to be a good starting
+point (\textbf{RQ1}). Fine-tuned with PPO, it was on par with a NatureCNN trained from scratch,
+with a higher median score, better final scores on four games and clearly faster learning on
+four. Kept frozen, it reached less than a third of that median score, so fine-tuning was
+clearly the better choice (\textbf{RQ2}). A frozen encoder would have to keep every small detail that
+matters in every game, which a reward-free objective has no reason to do. Neither
+model generalised to unseen games without fine-tuning (\textbf{RQ3}). Eleven games are not many,
+and the held-out games look quite different (Asteroids is 95\% black). Freezing also saved
+little computation, because the game simulation dominates: NatureCNN ran at 976 steps per
+second and the frozen V-JEPA at 854 (\textbf{RQ4}). The FSQ-VAE is also easier to inspect,
+because its decoder shows what the features contain.
+
+The V-JEPA learned a healthy latent space and real dynamics, but its objective rewarded
+predicting what usually happens in a game rather than what the agent's actions change, so its
+features were not useful for PPO, whether flattened or pooled. An important lesson for me was that
+every bug and shortcut in the V-JEPA pipeline still produced a nice-looking loss curve, so
+checks such as the copy baseline and wrong actions were necessary.
+
+This work has some limitations. All results come from a single seed, the FSQ agents and the
+other agents used two different PPO implementations, there is no NatureCNN baseline on the
+held-out games, and PPO was not re-tuned for the pre-trained encoders. In future work, I would
+first repeat the main comparison with three seeds on one implementation. For the V-JEPA,
+smaller patches and a training signal in which the action really matters (for example
+multi-step predictions or a reward head, as in TD-MPC2) look most promising, and the features
+should first be checked by predicting game-state variables such as object
+positions. Using the FSQ grid inside a world
+model~\cite{hafner2021dreamerv2,micheli2023iris} and pre-training on more games are further
+directions. A frozen, truly universal Atari feature extractor is still an open problem.
+
+\paragraph{Acknowledgements.}
+I would like to thank Oleh Shkalikov for proposing and supervising this project, and the
+Centre for Information Services and High Performance Computing (ZIH) at TU Dresden for the GPU
+time on the \emph{Capella} cluster.
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}

@@ -118,9 +118,8 @@ and a smaller HWC split (`custom_datasets_small/{train,val,test}`) that were bui
 HPC cluster. `collect_jepa_transitions.py` produces the same format (one 50 k-step shard per
 game), and `jepa/dataset_JEPA.py` auto-detects either layout.
 
-## Known limitations
+## Notes
 
-- The JEPA trains on single-step prediction only; see "Known limitation" in [jepa/README.md](jepa/README.md).
 - `ppo/custom/` is the earlier hand-written PPO. The paper's numbers come from `ppo/train_sb3.py`.
 - There is no automated test suite. `python jepa/JEPA.py` and `python -m models.vit_vqae` are self-checks.
 
